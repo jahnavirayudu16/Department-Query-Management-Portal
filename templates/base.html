@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Department Query Management Portal{% endblock %} | DQM Portal</title>
+  
+  <!-- Modern Inter Font & Core CSS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  
+  <!-- Socket.IO & Chart.js -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body data-user-role="{{ current_user.role if current_user else '' }}" data-user-dept="{{ current_user.department if current_user else '' }}">
+
+  <div class="app-container">
+    {% if current_user %}
+    <!-- Backdrop Overlay for Mobile Sidebar -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Left Collapsible Sidebar -->
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand-wrapper">
+          <div class="sidebar-logo">🎓</div>
+          <div class="sidebar-brand">
+            <h2>DQM Portal</h2>
+            <p>College Query System</p>
+          </div>
+        </div>
+        <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" title="Close Navigation" aria-label="Close Navigation">
+          ✕
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        {% if current_user.role in ['student', 'faculty'] %}
+        <div class="nav-section-title">My Workspace</div>
+        <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+          <span class="icon">📊</span> Dashboard
+        </a>
+        <a href="{{ url_for('submit_query') }}" class="nav-item {% if request.endpoint == 'submit_query' %}active{% endif %}">
+          <span class="icon">✍️</span> Post New Query
+        </a>
+        {% endif %}
+
+        {% if current_user.role in ['staff', 'admin'] %}
+        <div class="nav-section-title">Department Desk</div>
+        <a href="{{ url_for('department_dashboard') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
+          <span class="icon">📥</span> Department Queue
+        </a>
+        {% endif %}
+
+        {% if current_user.role == 'admin' %}
+        <div class="nav-section-title">Administration</div>
+        <a href="{{ url_for('admin_dashboard') }}" class="nav-item {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+          <span class="icon">⚡</span> Admin Cockpit
+        </a>
+        <a href="{{ url_for('admin_users') }}" class="nav-item {% if request.endpoint == 'admin_users' %}active{% endif %}">
+          <span class="icon">👥</span> Users Directory
+        </a>
+        <a href="{{ url_for('admin_departments') }}" class="nav-item {% if request.endpoint == 'admin_departments' %}active{% endif %}">
+          <span class="icon">🏢</span> Departments & SLAs
+        </a>
+        <a href="{{ url_for('admin_analytics') }}" class="nav-item {% if request.endpoint == 'admin_analytics' %}active{% endif %}">
+          <span class="icon">📈</span> Analytics & Reports
+        </a>
+        {% endif %}
+
+        <div class="nav-section-title">Account</div>
+        <a href="{{ url_for('notifications') }}" class="nav-item {% if request.endpoint == 'notifications' %}active{% endif %}">
+          <span class="icon">🔔</span> Notifications
+          {% if unread_notifications_count > 0 %}
+          <span class="badge badge-urgent" style="margin-left: auto; padding: 2px 6px; font-size: 0.7rem;">{{ unread_notifications_count }}</span>
+          {% endif %}
+        </a>
+        <a href="{{ url_for('profile') }}" class="nav-item {% if request.endpoint == 'profile' %}active{% endif %}">
+          <span class="icon">⚙️</span> Profile Settings
+        </a>
+
+        <!-- Prominent Sidebar Logout Button -->
+        <a href="{{ url_for('logout') }}" class="nav-item nav-item-logout" style="margin-top: 1.5rem;">
+          <span class="icon">🚪</span> Sign Out / Logout
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-avatar-circle">
+          {% if current_user.role == 'student' %}👨‍🎓{% elif current_user.role == 'faculty' %}👩‍🏫{% elif current_user.role == 'staff' %}🏢{% else %}⚡{% endif %}
+        </div>
+        <div style="flex-grow: 1; overflow: hidden;">
+          <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            {% if current_user.role == 'student' %}Student
+            {% elif current_user.role == 'faculty' %}Faculty Member
+            {% elif current_user.role == 'staff' %}Department Staff
+            {% else %}Administrator{% endif %}
+          </div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">
+            {% if current_user.role == 'student' %}
+              {{ current_user.course or 'Campus' }}{% if current_user.year %} (Yr {{ current_user.year }}){% endif %}
+            {% else %}
+              {{ current_user.department or 'Campus Support' }}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </aside>
+    {% endif %}
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+      {% if current_user %}
+      <!-- Top Navigation Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <!-- Sidebar Open / Toggle Button -->
+          <button class="sidebar-toggle-btn" id="sidebarToggle" title="Toggle Navigation Menu" aria-label="Toggle Navigation Menu">
+            ☰
+          </button>
+          <div class="topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Notification Bell Dropdown -->
+          <div class="notif-wrapper">
+            <button class="notif-btn" id="notifBtn" aria-label="Notifications" title="Notifications">
+              🔔
+              {% if unread_notifications_count > 0 %}
+              <span class="notif-badge">{{ unread_notifications_count }}</span>
+              {% endif %}
+            </button>
+
+            <div class="notif-dropdown" id="notifDropdown">
+              <div class="notif-header">
+                <span>Notifications</span>
+                <a href="{{ url_for('notifications') }}" style="font-size: 0.78rem; font-weight: 700;">View All</a>
+              </div>
+              <div class="notif-list">
+                {% if unread_notifications %}
+                  {% for n in unread_notifications %}
+                  <a href="{{ url_for('query_details', query_id=n.query_id) if n.query_id else url_for('notifications') }}" class="notif-item unread">
+                    <div class="notif-item-title">{{ n.title }}</div>
+                    <div class="notif-item-msg">{{ n.message }}</div>
+                    <div class="notif-item-time">{{ n.created_at | timeago }}</div>
+                  </a>
+                  {% endfor %}
+                {% else %}
+                  <div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                    ✨ No unread notifications
+                  </div>
+                {% endif %}
+              </div>
+              <div class="notif-footer">
+                <a href="{{ url_for('notifications') }}">Notification Center →</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Post Query CTA (Students and Faculty Only) -->
+          {% if current_user.role in ['student', 'faculty'] %}
+          <a href="{{ url_for('submit_query') }}" class="btn btn-primary btn-sm">
+            <span>+</span> Post Query
+          </a>
+          {% endif %}
+
+          <!-- Topbar Quick Logout Button -->
+          <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm" title="Sign Out of Portal" style="font-weight: 700;">
+            🚪 Logout
+          </a>
+        </div>
+      </header>
+      {% endif %}
+
+      <!-- Page Body & Flash Alerts -->
+      <main class="page-body">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">
+                <span>ℹ️</span>
+                <div>{{ message }}</div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

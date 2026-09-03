@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Departments & SLA Configurations{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin: 0;">Departments & SLA Standards</h1>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Configure department routing targets, response SLAs, and department heads</p>
+    </div>
+
+    <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('createDeptModal').style.display='block'">
+      + Add Department
+    </button>
+  </div>
+
+  <!-- Department Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem;">
+    {% for d in departments %}
+    <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+          <div>
+            <span class="badge badge-status-assigned" style="margin-bottom: 4px;">CODE: {{ d.code }}</span>
+            <h2 style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">{{ d.name }}</h2>
+          </div>
+          <div class="stat-icon primary" style="width: 40px; height: 40px; font-size: 1.1rem;">🏢</div>
+        </div>
+
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5;">
+          {{ d.description or 'Handles departmental queries.' }}
+        </p>
+
+        <div style="background: #f8fafc; padding: 0.75rem; border-radius: var(--radius-sm); font-size: 0.82rem; margin-bottom: 1rem;">
+          <div>👤 <strong>Head:</strong> {{ d.head_name or 'Not Assigned' }}</div>
+          <div>✉️ <strong>Contact:</strong> {{ d.contact_email or 'N/A' }}</div>
+          <div>👥 <strong>Staff Members:</strong> {{ d.staff_count }} assigned</div>
+          <div>📋 <strong>Active Queries:</strong> {{ d.query_count }}</div>
+        </div>
+      </div>
+
+      <!-- Update Target SLA Form -->
+      <form method="POST" action="{{ url_for('admin_departments') }}" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+        <input type="hidden" name="action" value="update_sla">
+        <input type="hidden" name="dept_id" value="{{ d.id }}">
+        <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">
+          Target SLA (Mins):
+        </div>
+        <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <input type="number" name="avg_response_minutes" value="{{ d.avg_response_minutes }}" class="form-control" style="width: 75px; padding: 0.25rem 0.5rem; font-size: 0.85rem;">
+          <button type="submit" class="btn btn-secondary btn-sm" style="padding: 0.25rem 0.6rem;">Save</button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<!-- Create Department Modal -->
+<div id="createDeptModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center;">
+  <div class="card" style="max-width: 480px; width: 90%; margin: 80px auto;">
+    <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem;">+ Add New Department</h3>
+    <form method="POST" action="{{ url_for('admin_departments') }}">
+      <input type="hidden" name="action" value="create">
+      
+      <div class="form-group">
+        <label class="form-label">Department Name *</label>
+        <input type="text" name="name" class="form-control" placeholder="e.g. Sports & Physical Education" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Department Code *</label>
+        <input type="text" name="code" class="form-control" placeholder="e.g. SPORTS" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-control" rows="2" placeholder="Responsibilities and scope..."></textarea>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div class="form-group">
+          <label class="form-label">Department Head</label>
+          <input type="text" name="head_name" class="form-control" placeholder="e.g. Dr. John Coach">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target SLA (Minutes)</label>
+          <input type="number" name="avg_response_minutes" class="form-control" value="15">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Official Contact Email</label>
+        <input type="email" name="contact_email" class="form-control" placeholder="sports@college.com">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('createDeptModal').style.display='none'">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Create Department</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

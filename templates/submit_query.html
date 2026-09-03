@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Post New Query{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+
+  <div class="card" style="padding: 2.25rem;">
+    <div style="margin-bottom: 1.75rem;">
+      <span class="badge badge-status-new" style="margin-bottom: 0.5rem;">🤖 Zero-Click Automatic Routing</span>
+      <h1 style="font-size: 1.6rem; font-weight: 800; color: var(--text-main);">What problem can we help you with?</h1>
+      <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">
+        Simply describe your issue in your own words. Our smart NLP engine will automatically identify the right department and assign priority.
+      </p>
+    </div>
+
+    <form method="POST" action="{{ url_for('submit_query') }}" enctype="multipart/form-data">
+      
+      <div class="form-group">
+        <label for="queryTitle" class="form-label">Query Title / Summary *</label>
+        <input type="text" id="queryTitle" name="title" class="form-control" placeholder="e.g. College Wi-Fi is not working in computer lab 3" required autofocus style="font-size: 1rem; padding: 0.85rem 1rem;">
+      </div>
+
+      <div class="form-group">
+        <label for="queryDesc" class="form-label">Detailed Problem Description *</label>
+        <textarea id="queryDesc" name="description" class="form-control" rows="6" placeholder="Provide as much detail as possible (e.g. what happened, room number, transaction ref, error message, urgency, etc.)..." required style="font-size: 0.95rem; line-height: 1.5; padding: 0.85rem 1rem;"></textarea>
+      </div>
+
+      <!-- Live AI Detection Preview Card -->
+      <div id="aiPreviewBox" class="ai-preview-box" style="display: none;">
+        <div class="ai-preview-header">
+          <div class="ai-badge-spark">
+            <span>✨</span> Smart Detection Live Preview
+          </div>
+          <span id="previewConf" style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">95% Confidence</span>
+        </div>
+
+        <div style="display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
+          <div>
+            <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block;">Routed Department</span>
+            <strong id="previewDept" style="font-size: 1.05rem; color: var(--primary);">IT Department</strong>
+          </div>
+          <div>
+            <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block;">Category</span>
+            <span id="previewCat" style="font-size: 0.9rem; font-weight: 600; color: var(--text-main);">Technical Issue</span>
+          </div>
+          <div>
+            <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block;">Detected Priority</span>
+            <span id="previewPrio" class="badge badge-high">High</span>
+          </div>
+        </div>
+
+        <p id="previewReason" style="font-size: 0.82rem; color: #475569; margin-top: 0.35rem; font-style: italic; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 0.35rem;">
+          Matched keywords corresponding to IT infrastructure.
+        </p>
+      </div>
+
+      <!-- Optional File Attachment -->
+      <div class="form-group" style="margin-top: 1.5rem;">
+        <label for="attachment" class="form-label">
+          📎 Optional Attachment (Screenshot, Fee Receipt, PDF, Document)
+        </label>
+        <input type="file" id="attachment" name="attachment" class="form-control" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt,.zip">
+        <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: block;">
+          Max file size: 16 MB. Supported: JPG, PNG, PDF, DOCX, TXT.
+        </span>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+          ← Cancel
+        </a>
+        <button type="submit" class="btn btn-primary btn-lg">
+          🚀 Submit & Automatically Route Query
+        </button>
+      </div>
+
+    </form>
+  </div>
+
+</div>
+{% endblock %}

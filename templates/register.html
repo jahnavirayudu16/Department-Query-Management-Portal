@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+
+{% block title %}Register Account | Department Query Management Portal{% endblock %}
+
+{% block content %}
+<div style="max-width: 620px; margin: 1.5rem auto;">
+  <div class="card" style="padding: 2.25rem; background: #ffffff; border: 1px solid var(--border-color); box-shadow: var(--shadow-md);">
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+      <div class="sidebar-logo" style="margin: 0 auto 0.75rem; width: 48px; height: 48px; font-size: 1.4rem;">📝</div>
+      <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main);">Create Your Account</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+        🔒 <strong>100% Anonymous & Protected:</strong> Personal names and student IDs are not displayed anywhere in the portal so you can post issues freely and without hesitation.
+      </p>
+    </div>
+
+    <form method="POST" action="{{ url_for('register') }}">
+      
+      <!-- Role Switcher (Student, Faculty, Department Staff, Admin) -->
+      <div class="form-group">
+        <label class="form-label">Register As:</label>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
+          <label style="display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; background: #f8fafc; text-align: center;">
+            <input type="radio" name="role" value="student" checked onchange="handleRoleChange('student')">
+            <span style="font-weight: 700; font-size: 0.85rem; color: #0f172a;">👨‍🎓 Student</span>
+          </label>
+          <label style="display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; background: #f8fafc; text-align: center;">
+            <input type="radio" name="role" value="faculty" onchange="handleRoleChange('faculty')">
+            <span style="font-weight: 700; font-size: 0.85rem; color: #0f172a;">👩‍🏫 Faculty</span>
+          </label>
+          <label style="display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; background: #f8fafc; text-align: center;">
+            <input type="radio" name="role" value="staff" onchange="handleRoleChange('staff')">
+            <span style="font-weight: 700; font-size: 0.85rem; color: #0f172a;">🏢 Staff</span>
+          </label>
+          <label style="display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.6rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer; background: #f8fafc; text-align: center;">
+            <input type="radio" name="role" value="admin" onchange="handleRoleChange('admin')">
+            <span style="font-weight: 700; font-size: 0.85rem; color: #0f172a;">⚡ Central Admin</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Account Email & Password -->
+      <div class="form-group">
+        <label for="email" class="form-label">Email Address *</label>
+        <input type="email" id="email" name="email" class="form-control" placeholder="user@college.com" required>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="form-group">
+          <label for="password" class="form-label">Password *</label>
+          <input type="password" id="password" name="password" class="form-control" placeholder="Min. 6 characters" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="confirm_password" class="form-label">Confirm Password *</label>
+          <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="Re-enter password" required minlength="6">
+        </div>
+      </div>
+
+      <!-- STUDENT SECTION: Dynamic Course & Year -->
+      <div id="studentFields">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label for="courseSelect" class="form-label">Course / Degree Program *</label>
+            <select id="courseSelect" name="course" class="form-control" onchange="updateCourseData()">
+              <option value="B.Tech">B.Tech</option>
+              <option value="Diploma">Diploma (Polytechnic)</option>
+              <option value="Degree">Degree (B.Sc / B.Com / BBA / BCA / B.A)</option>
+              <option value="M.Tech">M.Tech</option>
+              <option value="MCA">MCA</option>
+              <option value="MBA">MBA</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="yearSelect" class="form-label">Current Year of Study *</label>
+            <select id="yearSelect" name="year" class="form-control">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Dynamic Branch / Department List based on Course -->
+        <div class="form-group">
+          <label for="branchSelect" class="form-label">Branch / Specialization *</label>
+          <select id="branchSelect" name="department" class="form-control">
+            <!-- Dynamically populated with all specialization branches -->
+          </select>
+        </div>
+      </div>
+
+      <!-- FACULTY / STAFF / CENTRAL ADMIN SECTION -->
+      <div id="staffDeptFields" style="display: none;">
+        <div class="form-group">
+          <label for="staffNameInput" class="form-label" id="staffNameLabel">Full Name *</label>
+          <input type="text" id="staffNameInput" name="staff_name" class="form-control" placeholder="e.g. David Kumar, Dr. Alan Turing, Mrs. Eleanor Wright">
+          <small style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-top: 4px;">
+            💡 <em>Names are displayed on assignments and query desks so users know who is assisting them.</em>
+          </small>
+        </div>
+
+        <div class="form-group" id="staffDeptGroup">
+          <label for="staffDeptSelect" class="form-label">Department / Wing *</label>
+          <select id="staffDeptSelect" class="form-control">
+            <option value="Academics">📚 Academics (Exams, Marks, Attendance, Studies)</option>
+            <option value="Administrative">🏢 Administrative (Fees, Certificates, ID, Admissions)</option>
+            <option value="Others">🔧 Others (Hostel, Mess, Wi-Fi, Transport, Facility)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="designationInput" class="form-label">Designation / Role Title</label>
+          <input type="text" id="designationInput" name="designation" class="form-control" placeholder="e.g. Assistant Professor, Support Lead, Dean of Administration">
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 0.75rem;">
+        Complete Registration →
+      </button>
+    </form>
+
+    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-muted);">
+      Already have an account? <a href="{{ url_for('login') }}" style="font-weight: 700;">Sign in here</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Comprehensive Course-to-Branches and Years Configuration
+const coursesData = {
+  'B.Tech': {
+    years: [1, 2, 3, 4],
+    branches: [
+      'Computer Science & Engineering (CSE)',
+      'CSE (AI & Machine Learning)',
+      'CSE (Data Science)',
+      'CSE (Cyber Security)',
+      'Information Technology (IT)',
+      'Electronics & Communication Engineering (ECE)',
+      'Electrical & Electronics Engineering (EEE)',
+      'Mechanical Engineering (ME)',
+      'Civil Engineering (CE)',
+      'Chemical Engineering',
+      'Biotechnology Engineering',
+      'Agricultural Engineering'
+    ]
+  },
+  'Diploma': {
+    years: [1, 2, 3],
+    branches: [
+      'Diploma in Computer Engineering (DCME)',
+      'Diploma in Electronics & Communication (DECE)',
+      'Diploma in Electrical & Electronics (DEEE)',
+      'Diploma in Mechanical Engineering (DME)',
+      'Diploma in Civil Engineering (DCE)',
+      'Diploma in Automobile Engineering'
+    ]
+  },
+  'Degree': {
+    years: [1, 2, 3],
+    branches: [
+      'Bachelor of Computer Applications (BCA)',
+      'B.Sc (Computer Science)',
+      'B.Sc (Data Science)',
+      'B.Sc (Mathematics, Physics, Chemistry - MPC)',
+      'B.Sc (Biotechnology / Microbiology)',
+      'B.Com (General)',
+      'B.Com (Computers / E-Commerce)',
+      'Bachelor of Business Administration (BBA)',
+      'B.A (Economics / Literature / History)'
+    ]
+  },
+  'M.Tech': {
+    years: [1, 2],
+    branches: [
+      'M.Tech (Computer Science & Engineering)',
+      'M.Tech (VLSI & Embedded Systems)',
+      'M.Tech (Power Electronics)',
+      'M.Tech (CAD / CAM)',
+      'M.Tech (Structural Engineering)',
+      'M.Tech (Data Science & AI)'
+    ]
+  },
+  'MCA': {
+    years: [1, 2],
+    branches: [
+      'Master of Computer Applications (MCA - Regular)',
+      'MCA (Data Analytics & Cloud Systems)'
+    ]
+  },
+  'MBA': {
+    years: [1, 2],
+    branches: [
+      'MBA (Finance Management)',
+      'MBA (Marketing Management)',
+      'MBA (Human Resource Management - HR)',
+      'MBA (Business Analytics)',
+      'MBA (Operations & Supply Chain)'
+    ]
+  }
+};
+
+function updateCourseData() {
+  const course = document.getElementById('courseSelect').value;
+  const yearSelect = document.getElementById('yearSelect');
+  const branchSelect = document.getElementById('branchSelect');
+  const data = coursesData[course] || coursesData['B.Tech'];
+  
+  // Populate Years
+  yearSelect.innerHTML = '';
+  data.years.forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = `${y}${y === 1 ? 'st' : y === 2 ? 'nd' : y === 3 ? 'rd' : 'th'} Year`;
+    yearSelect.appendChild(opt);
+  });
+
+  // Populate Branches List
+  branchSelect.innerHTML = '';
+  data.branches.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b;
+    opt.textContent = b;
+    branchSelect.appendChild(opt);
+  });
+}
+
+function handleRoleChange(role) {
+  const studentFields = document.getElementById('studentFields');
+  const staffDeptFields = document.getElementById('staffDeptFields');
+  const branchSelect = document.getElementById('branchSelect');
+  const staffDeptGroup = document.getElementById('staffDeptGroup');
+  const staffDeptSelect = document.getElementById('staffDeptSelect');
+  const staffNameLabel = document.getElementById('staffNameLabel');
+  const yearGroup = document.getElementById('yearSelect').parentElement;
+  
+  if (role === 'student') {
+    studentFields.style.display = 'block';
+    staffDeptFields.style.display = 'none';
+    yearGroup.style.display = 'block';
+    branchSelect.name = 'department';
+    staffDeptSelect.name = '';
+  } else if (role === 'faculty') {
+    studentFields.style.display = 'block';
+    staffDeptFields.style.display = 'none';
+    yearGroup.style.display = 'none';
+    branchSelect.name = 'department';
+    staffDeptSelect.name = '';
+  } else if (role === 'admin') {
+    // Central Admin: NO department/wing
+    studentFields.style.display = 'none';
+    staffDeptFields.style.display = 'block';
+    staffDeptGroup.style.display = 'none'; // Completely hide Department/Wing for Admin!
+    staffDeptSelect.name = '';
+    branchSelect.name = '';
+    staffNameLabel.textContent = 'Administrator Full Name *';
+  } else {
+    // Staff: Needs Department/Wing
+    studentFields.style.display = 'none';
+    staffDeptFields.style.display = 'block';
+    staffDeptGroup.style.display = 'block';
+    staffDeptSelect.name = 'department';
+    branchSelect.name = '';
+    staffNameLabel.textContent = 'Staff Member Full Name *';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  updateCourseData();
+  handleRoleChange('student');
+});
+</script>
+{% endblock %}

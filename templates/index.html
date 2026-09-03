@@ -1,0 +1,417 @@
+{% extends 'base.html' %}
+
+{% block title %}Department Query Management Portal - Academics, Administrative & Campus Support{% endblock %}
+
+{% block content %}
+<div style="max-width: 1100px; margin: 0 auto;">
+
+  <!-- Hero Section with Clean White Background & Dark Typography -->
+  <section class="hero-card" style="text-align: center; padding: 3.5rem 2rem; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 60%, #eef2ff 100%); border: 1px solid #cbd5e1;">
+    <span class="badge badge-status-assigned" style="margin-bottom: 1rem; padding: 6px 14px; font-size: 0.85rem;">
+      🚀 3 Primary Pillars: Academics • Administrative • Others
+    </span>
+    <h1 style="font-size: 2.75rem; line-height: 1.15; margin-bottom: 1rem; color: #0f172a;">
+      One Portal. Every Query.<br><span style="background: linear-gradient(90deg, #4f46e5, #0284c7); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Faster Resolution.</span>
+    </h1>
+    <p style="margin: 0 auto 2rem; font-size: 1.15rem; color: #334155; max-width: 720px; line-height: 1.6; font-weight: 500;">
+      An intelligent college support platform that automatically categorizes student and faculty queries into <strong>Academics</strong>, <strong>Administrative</strong>, or <strong>Others</strong> without requiring you to choose manually.
+    </p>
+       <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+      {% if current_user %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary btn-lg">
+          ⚡ Go to Central Admin Cockpit
+        </a>
+        {% elif current_user.role == 'staff' %}
+        <a href="{{ url_for('department_dashboard') }}" class="btn btn-primary btn-lg">
+          📥 Go to Department Desk
+        </a>
+        {% else %}
+        <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg">
+          🚀 Go to My Dashboard
+        </a>
+        <a href="{{ url_for('submit_query') }}" class="btn btn-secondary btn-lg">
+          ✍️ Post New Query
+        </a>
+        {% endif %}
+      {% else %}
+        <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">
+          🔑 Access Portal (Demo Login)
+        </a>
+        <a href="{{ url_for('register') }}" class="btn btn-secondary btn-lg">
+          📝 Register
+        </a>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Live Stats Strip -->
+  <div class="stats-grid" style="margin-top: -1rem; margin-bottom: 3rem;">
+    <div class="stat-card">
+      <div class="stat-icon primary">📋</div>
+      <div class="stat-info">
+        <h3>{{ total_queries }}+</h3>
+        <p>Total College Queries</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon success">✅</div>
+      <div class="stat-info">
+        <h3>{{ resolved_queries }}+</h3>
+        <p>Resolved Successfully</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon secondary">🏢</div>
+      <div class="stat-info">
+        <h3>3 Wings</h3>
+        <p>Academics, Admin & Others</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon warning">🔒</div>
+      <div class="stat-info">
+        <h3>100%</h3>
+        <p>Protected Privacy</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 Primary Category Highlights (Clickable Cards that open the category problems modal) -->
+  <div style="margin-bottom: 3rem;">
+    <div style="text-align: center; margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin-bottom: 0.25rem;">
+        Explore the 3 Core Categories
+      </h2>
+      <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
+        💡 Click on any category card below to preview all problems and topics handled by that desk:
+      </p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem;">
+      <!-- 1. Academics Card -->
+      <div class="card category-clickable-card" onclick="openCategoryModal('academics')" style="border-top: 4px solid #4f46e5; cursor: pointer; transition: all 0.25s ease;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.4rem;">📚</span>
+            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0;">1. Academics</h3>
+          </div>
+          <span class="badge badge-status-new" style="font-size: 0.72rem;">🔍 View Topics</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.75rem;">
+          Studies, attendance shortages, internal/external marks, results, hall tickets, revaluations, assignments, lab sessions & timetables.
+        </p>
+        <span style="color: #4f46e5; font-size: 0.82rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">
+          Click to see 25+ academic problem types →
+        </span>
+      </div>
+
+      <!-- 2. Administrative Card -->
+      <div class="card category-clickable-card" onclick="openCategoryModal('administrative')" style="border-top: 4px solid #0284c7; cursor: pointer; transition: all 0.25s ease;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.4rem;">🏢</span>
+            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0;">2. Administrative</h3>
+          </div>
+          <span class="badge badge-status-waiting" style="font-size: 0.72rem;">🔍 View Topics</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.75rem;">
+          Fee payments & receipts, scholarship credits, bonafide & transfer certificates, ID cards, admissions, document verifications.
+        </p>
+        <span style="color: #0284c7; font-size: 0.82rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">
+          Click to see 20+ administrative problem types →
+        </span>
+      </div>
+
+      <!-- 3. Others Card -->
+      <div class="card category-clickable-card" onclick="openCategoryModal('others')" style="border-top: 4px solid #f59e0b; cursor: pointer; transition: all 0.25s ease;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.4rem;">🔧</span>
+            <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0;">3. Others</h3>
+          </div>
+          <span class="badge badge-high" style="font-size: 0.72rem;">🔍 View Topics</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.75rem;">
+          Hostel room issues, mess food quality, campus Wi-Fi, computer labs, library books, bus routes, sports & general complaints.
+        </p>
+        <span style="color: #d97706; font-size: 0.82rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">
+          Click to see 25+ campus problem types →
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fast Demo Account Access Strip -->
+  <div class="card" style="background: #ffffff; border: 1px solid var(--border-color); padding: 2rem; box-shadow: var(--shadow); margin-bottom: 3rem;">
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+      <h3 style="font-size: 1.3rem; font-weight: 800; color: #0f172a;">Ready to test the live portal?</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Sign in instantly using preloaded demo credentials:</p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
+        <div style="font-weight: 800; font-size: 0.95rem; color: #0284c7;">👨‍🎓 Student</div>
+        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">student@college.com</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: student123</div>
+      </a>
+
+      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
+        <div style="font-weight: 800; font-size: 0.95rem; color: #b45309;">👩‍🏫 Faculty</div>
+        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">faculty@college.com</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: faculty123</div>
+      </a>
+
+      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
+        <div style="font-weight: 800; font-size: 0.95rem; color: #6d28d9;">🏢 Department Staff</div>
+        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">staff@college.com</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: staff123</div>
+      </a>
+
+      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
+        <div style="font-weight: 800; font-size: 0.95rem; color: #b91c1c;">⚡ Central Admin</div>
+        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">admin@college.com</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: admin123</div>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<!-- Interactive Category Details Popup Modal / Window -->
+<div id="categoryModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px); padding: 1rem;">
+  <div class="card" style="max-width: 760px; width: 100%; max-height: 90vh; overflow-y: auto; background: #ffffff; border-radius: var(--radius-lg); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); padding: 2rem; position: relative;">
+    
+    <!-- Close Button -->
+    <button type="button" onclick="closeCategoryModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: #f1f5f9; border: none; font-size: 1.25rem; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #475569;">
+      ✕
+    </button>
+
+    <!-- Modal Category Switcher Tabs -->
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem; flex-wrap: wrap;">
+      <button id="modalTabAcademics" onclick="switchModalCategory('academics')" class="btn btn-sm" style="font-weight: 700; border-radius: var(--radius-sm); padding: 0.5rem 1rem;">
+        📚 1. Academics
+      </button>
+      <button id="modalTabAdministrative" onclick="switchModalCategory('administrative')" class="btn btn-sm" style="font-weight: 700; border-radius: var(--radius-sm); padding: 0.5rem 1rem;">
+        🏢 2. Administrative
+      </button>
+      <button id="modalTabOthers" onclick="switchModalCategory('others')" class="btn btn-sm" style="font-weight: 700; border-radius: var(--radius-sm); padding: 0.5rem 1rem;">
+        🔧 3. Others
+      </button>
+    </div>
+
+    <!-- Category Content Section -->
+    <div id="modalCategoryBody">
+      <!-- Dynamically filled by JS -->
+    </div>
+
+    <!-- Modal Footer Actions -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.75rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; flex-wrap: wrap; gap: 0.75rem;">
+      <span style="font-size: 0.82rem; color: var(--text-muted);">
+        🔒 <em>Queries are filed anonymously and automatically routed to the right desk.</em>
+      </span>
+      <div style="display: flex; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeCategoryModal()">Close Window</button>
+        {% if not current_user or current_user.role in ['student', 'faculty'] %}
+        <a href="{{ url_for('submit_query') }}" class="btn btn-primary btn-sm">
+          ✍️ Post Query in this Category →
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Detailed Category Breakdown Directory
+const categoryData = {
+  'academics': {
+    title: '1. Academics Wing',
+    icon: '📚',
+    themeColor: '#4f46e5',
+    description: 'Directly handles all issues regarding student coursework, examinations, marks evaluation, faculty allocation, and schedules.',
+    groups: [
+      {
+        title: '📊 Studies & Examinations',
+        items: [
+          'Attendance Shortage & Medical Leave Approval',
+          'Internal Assessment Marks Discrepancy',
+          'External University Examination Marks',
+          'Semester Result & CGPA Correction',
+          'Grade Sheet Issues & Mark Memo Requests',
+          'Supplementary & Regular Exam Registrations',
+          'Paper Revaluation & Recounting Applications',
+          'Backlog Subject Guidance & Clearances'
+        ]
+      },
+      {
+        title: '📅 Timetables & Registrations',
+        items: [
+          'Midterm & Final Examination Schedules',
+          'Hall Ticket Download Errors & Token Issues',
+          'Course / Subject Registration & Choice Selection',
+          'Branch / Subject Change Approvals',
+          'Class Cancellation & Rescheduling Notices',
+          'Faculty Allocation & Substitute Teacher Requests'
+        ]
+      },
+      {
+        title: '📝 Assignments & Laboratory',
+        items: [
+          'Assignment Submission Portal & LMS Errors',
+          'Assignment Submission Deadline Extensions',
+          'Laboratory Sessions, System Software & Equipment',
+          'Major / Mini Project Approval & Mentor Allocation'
+        ]
+      }
+    ]
+  },
+  'administrative': {
+    title: '2. Administrative Wing',
+    icon: '🏢',
+    themeColor: '#0284c7',
+    description: 'Directly handles college fees, student verification certificates, financial aid/scholarships, ID cards, and official administrative permissions.',
+    groups: [
+      {
+        title: '💳 Fees & Financial Services',
+        items: [
+          'Semester Tuition Fee Payment Verification',
+          'Online Payment Gateway & NetBanking Receipt Update',
+          'Student Account Dues Pending Correction',
+          'Fee Refund Requests & Excess Payment Adjustment',
+          'Fee Concession & Installment Permission Requests',
+          'Exam Fee Payment Confirmation'
+        ]
+      },
+      {
+        title: '📄 Certificates & Official Documents',
+        items: [
+          'Urgent Bonafide Certificate (Passport / Bank Loans)',
+          'Transfer Certificate (TC) & Conduct Certificate',
+          'Study Certificate & Custodian of Certificates',
+          'Medium of Instruction English Certificate',
+          'Migration Certificate for Higher Studies',
+          'No Objection Certificate (NOC) for Internships'
+        ]
+      },
+      {
+        title: '🎓 Scholarships & Admissions',
+        items: [
+          'State & Central Merit Scholarship Disbursements',
+          'E-Pass / National Scholarship Portal (NSP) Verification',
+          'Student ID Card Replacement & Duplicate Badge',
+          'Name / Date of Birth Correction in College Records',
+          'College Bus Pass Verification & Authorization',
+          'Hostel Admission & Security Clearance'
+        ]
+      }
+    ]
+  },
+  'others': {
+    title: '3. Others (Campus Support Wing)',
+    icon: '🔧',
+    themeColor: '#d97706',
+    description: 'Directly handles student life on campus including hostel living, dining food quality, digital Wi-Fi, computer labs, library, transport, and facilities.',
+    groups: [
+      {
+        title: '🏡 Hostel & Mess Food',
+        items: [
+          'Hostel Room Maintenance (Water / Plumbing Leakage)',
+          'Room Electricals (Fan, Light, Power Socket Repairs)',
+          'Mess Food Quality, Hygiene & Meal Timing Issues',
+          'RO Drinking Water Coolers & Filter Replacements',
+          'Hostel Washroom Cleaning & Waste Disposal'
+        ]
+      },
+      {
+        title: '📶 IT Infrastructure & Libraries',
+        items: [
+          'Campus & Hostel High-Speed Wi-Fi Connectivity',
+          'Computer Lab Systems, Operating Systems & Network',
+          'Smart Classroom Projectors & Audio Equipment',
+          'Central Library Book Issue, Returns & Late Fine Review',
+          'Digital Library E-Journals & IEEE Access'
+        ]
+      },
+      {
+        title: '🚌 Transportation, Sports & Campus Life',
+        items: [
+          'College Bus Route Timings, Delays & Breakdown Support',
+          'Sports Equipment, Ground Maintenance & Gymnasium',
+          'Campus Security, Parking & Surveillance Assistance',
+          'Lost and Found Items Recovery',
+          'General Campus Facilities & Medical First-Aid Center'
+        ]
+      }
+    ]
+  }
+};
+
+function openCategoryModal(catKey) {
+  const modal = document.getElementById('categoryModal');
+  modal.style.display = 'flex';
+  switchModalCategory(catKey);
+}
+
+function closeCategoryModal() {
+  const modal = document.getElementById('categoryModal');
+  modal.style.display = 'none';
+}
+
+function switchModalCategory(catKey) {
+  const data = categoryData[catKey] || categoryData['academics'];
+  
+  // Highlight active tab
+  ['academics', 'administrative', 'others'].forEach(k => {
+    const tab = document.getElementById('modalTab' + k.charAt(0).toUpperCase() + k.slice(1));
+    if (k === catKey) {
+      tab.style.background = data.themeColor;
+      tab.style.color = '#ffffff';
+      tab.style.border = 'none';
+    } else {
+      tab.style.background = '#f1f5f9';
+      tab.style.color = '#334155';
+      tab.style.border = '1px solid #cbd5e1';
+    }
+  });
+
+  // Render Body
+  let html = `
+    <div style="margin-bottom: 1.25rem;">
+      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem;">
+        <span style="font-size: 1.6rem;">${data.icon}</span>
+        <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0;">${data.title}</h2>
+      </div>
+      <p style="font-size: 0.88rem; color: #475569; margin: 0; line-height: 1.5;">${data.description}</p>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+  `;
+
+  data.groups.forEach(group => {
+    html += `
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 1rem;">
+        <h4 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin-bottom: 0.75rem; border-bottom: 2px solid ${data.themeColor}; padding-bottom: 0.35rem;">
+          ${group.title}
+        </h4>
+        <ul style="margin: 0; padding-left: 1.1rem; font-size: 0.82rem; color: #334155; line-height: 1.6;">
+          ${group.items.map(item => `<li style="margin-bottom: 0.35rem;">${item}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  document.getElementById('modalCategoryBody').innerHTML = html;
+}
+
+// Close modal when clicking outside box
+window.addEventListener('click', function(e) {
+  const modal = document.getElementById('categoryModal');
+  if (e.target === modal) {
+    closeCategoryModal();
+  }
+});
+</script>
+{% endblock %}

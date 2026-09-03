@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block page_title %}User Profile & Account Security{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+
+  <div style="margin-bottom: 1.5rem;">
+    <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin: 0;">Account & Security Settings</h1>
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Manage your academic preferences, contact details, and login credentials</p>
+  </div>
+
+  <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem;">
+    <span style="font-size: 1.4rem;">🔒</span>
+    <div style="font-size: 0.85rem; color: #3730a3;">
+      <strong>Identity Protected:</strong> Your personal name and student roll number are never revealed on public feeds, query tables, or chat to ensure fearless support requests.
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+    
+    <!-- Profile Info Card -->
+    <div class="card">
+      <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="user-avatar-circle" style="width: 52px; height: 52px; font-size: 1.3rem;">
+          {% if user.role == 'student' %}👨‍🎓{% elif user.role == 'faculty' %}👩‍🏫{% elif user.role == 'staff' %}🏢{% else %}⚡{% endif %}
+        </div>
+        <div>
+          <h2 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main);">
+            {% if user.role == 'student' %}Student Account
+            {% elif user.role == 'faculty' %}Faculty Account
+            {% elif user.role == 'staff' %}Department Staff
+            {% else %}System Administrator{% endif %}
+          </h2>
+          <span class="badge badge-status-assigned">{{ user.role | upper }}</span>
+        </div>
+      </div>
+
+      <form method="POST" action="{{ url_for('profile') }}">
+        <input type="hidden" name="action" value="update_info">
+        
+        <div class="form-group">
+          <label class="form-label">College Email Address</label>
+          <input type="email" class="form-control" value="{{ user.email }}" disabled style="background: #f1f5f9; cursor: not-allowed;">
+        </div>
+
+        {% if user.role == 'student' and user.course %}
+        <div class="form-group">
+          <label class="form-label">Course / Degree Program</label>
+          <input type="text" class="form-control" value="{{ user.course }} {% if user.year %}(Year {{ user.year }}){% endif %}" disabled style="background: #f1f5f9;">
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label">Branch / Department</label>
+          <input type="text" name="department" class="form-control" value="{{ user.department or '' }}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Contact Phone Number (Optional)</label>
+          <input type="tel" name="phone" class="form-control" value="{{ user.phone or '' }}" placeholder="+91 9876543210">
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-sm" style="width: 100%;">
+          Save Profile Preferences
+        </button>
+      </form>
+    </div>
+
+    <!-- Security & Password Card -->
+    <div class="card">
+      <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem;">🔑 Change Password</h3>
+      
+      <form method="POST" action="{{ url_for('profile') }}">
+        <input type="hidden" name="action" value="change_password">
+        
+        <div class="form-group">
+          <label class="form-label">Current Password *</label>
+          <input type="password" name="current_password" class="form-control" placeholder="••••••••" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">New Password *</label>
+          <input type="password" name="new_password" class="form-control" placeholder="Min. 6 chars" required minlength="6">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Confirm New Password *</label>
+          <input type="password" name="confirm_password" class="form-control" placeholder="Re-enter new password" required minlength="6">
+        </div>
+
+        <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%;">
+          Update Password
+        </button>
+      </form>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

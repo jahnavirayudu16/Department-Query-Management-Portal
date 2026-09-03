@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block page_title %}College Support Analytics & Visual Reports{% endblock %}
+
+{% block extra_head %}
+<script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto;" id="analyticsDashboard">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h1 style="font-size: 1.6rem; font-weight: 800; color: var(--text-main); margin: 0;">Analytics & Category Insights</h1>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin: 0;">Comprehensive breakdown of problems across Academics, Administrative, and Others</p>
+    </div>
+
+    <button onclick="window.print()" class="btn btn-secondary btn-sm">
+      🖨️ Export / Print Report
+    </button>
+  </div>
+
+  <!-- Chart Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+
+    <!-- 1. Category Problem Distribution Pie Chart -->
+    <div class="card" style="border-top: 4px solid var(--primary);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--text-main); margin: 0;">
+          🥧 Problems by Category (Academics vs Admin vs Others)
+        </h3>
+        <span id="topProblemCategoryBadge" class="badge badge-urgent" style="font-size: 0.75rem;">Loading...</span>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Visual percentage representation of which category has the highest volume of reported issues.
+      </p>
+      <div style="height: 280px; position: relative;">
+        <canvas id="catChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 2. Department Resolution Volume -->
+    <div class="card" style="border-top: 4px solid #0284c7;">
+      <h3 style="font-size: 1.1rem; font-weight: 800; margin-bottom: 0.75rem; color: var(--text-main);">
+        🏢 Queries by Department Wing
+      </h3>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Total issue workload across Academics, Administrative, and Others desks.
+      </p>
+      <div style="height: 280px; position: relative;">
+        <canvas id="deptChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 3. Lifecycle Status Distribution -->
+    <div class="card">
+      <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-main);">
+        📊 Lifecycle Status Breakdown
+      </h3>
+      <div style="height: 260px; position: relative;">
+        <canvas id="statusChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 4. Query Urgency & Priority Levels -->
+    <div class="card">
+      <h3 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-main);">
+        🚨 Query Urgency & Priority Levels
+      </h3>
+      <div style="height: 260px; position: relative;">
+        <canvas id="priorityChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

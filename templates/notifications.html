@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Notification Center{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div>
+      <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin: 0;">Notification Center</h1>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Stay informed about query assignments, replies, and status updates</p>
+    </div>
+
+    <button type="button" class="btn btn-secondary btn-sm" onclick="markAllRead()">
+      ✓ Mark All as Read
+    </button>
+  </div>
+
+  <div class="card" style="padding: 0; overflow: hidden;">
+    {% if notifications %}
+      {% for n in notifications %}
+      <div class="notif-item {% if not n.is_read %}unread{% endif %}" style="padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);">
+        <div style="display: flex; gap: 1rem; align-items: flex-start;">
+          <div style="font-size: 1.3rem; margin-top: 2px;">
+            {% if n.type == 'urgent' %}🚨
+            {% elif n.type == 'success' %}✅
+            {% elif n.type == 'message' %}💬
+            {% else %}🔔{% endif %}
+          </div>
+          <div>
+            <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">{{ n.title }}</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">{{ n.message }}</div>
+            <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 4px;">{{ n.created_at | timeago }}</div>
+          </div>
+        </div>
+
+        <div>
+          {% if n.query_id %}
+          <a href="{{ url_for('query_details', query_id=n.query_id) }}" class="btn btn-secondary btn-sm" onclick="markSingleRead({{ n.id }})">
+            Open Query →
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔔</div>
+        <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--text-main);">No Notifications</h3>
+        <p style="font-size: 0.85rem; margin-top: 4px;">You are completely caught up!</p>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+function markAllRead() {
+  fetch("{{ url_for('mark_notifications_read') }}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === 'success') {
+      window.location.reload();
+    }
+  });
+}
+
+function markSingleRead(id) {
+  fetch("{{ url_for('mark_notifications_read') }}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'notif_id=' + id
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+
+{% block page_title %}{{ dept }} Department Command Center{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto;">
+
+  <!-- Department Header Banner -->
+  <div class="hero-card" style="padding: 1.75rem 2.25rem; margin-bottom: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+          <span class="badge badge-status-waiting" style="background: rgba(255,255,255,0.2); color: #fff; border: none;">
+            🏢 {{ dept }} Department Desk
+          </span>
+        </div>
+        <h1 style="font-size: 1.75rem; margin-bottom: 0.25rem;">{{ dept }} Query Resolution Queue</h1>
+        <p style="font-size: 0.88rem; color: #c7d2fe; margin: 0;">
+          {{ dept_info.description if dept_info else 'Manage and respond to student and faculty queries in real-time.' }}
+        </p>
+      </div>
+
+      {% if current_user.role == 'admin' %}
+      <div>
+        <form method="GET" action="{{ url_for('department_dashboard') }}" style="display: flex; gap: 0.5rem; align-items: center;">
+          <label style="color: #fff; font-size: 0.85rem; font-weight: 600;">Switch Dept:</label>
+          <select name="dept" class="form-control" onchange="this.form.submit()" style="padding: 0.45rem 0.75rem; font-size: 0.85rem;">
+            {% for d in DEPARTMENTS %}
+            <option value="{{ d }}" {% if dept == d %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Urgent / High Priority Alert Banner if any pending -->
+  {% if stats.urgent > 0 %}
+  <div class="urgent-banner">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <span style="font-size: 1.3rem;">🚨</span>
+      <div>
+        <strong>ATTENTION:</strong> You have <strong>{{ stats.urgent }} Urgent query/queries</strong> requiring immediate action!
+      </div>
+    </div>
+    <a href="{{ url_for('department_dashboard', dept=dept, priority='Urgent') }}" class="btn btn-secondary btn-sm" style="background: #ffffff; color: #b91c1c; font-weight: 700;">
+      View Urgent Queries →
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- KPI Statistics Tiles -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon primary">🆕</div>
+      <div class="stat-info">
+        <h3 id="statNewQueries">{{ stats.new }}</h3>
+        <p>New Queries</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon danger">🚨</div>
+      <div class="stat-info">
+        <h3>{{ stats.urgent }}</h3>
+        <p>Urgent Priority</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon warning">⚡</div>
+      <div class="stat-info">
+        <h3>{{ stats.high }}</h3>
+        <p>High Priority</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon secondary">⏳</div>
+      <div class="stat-info">
+        <h3>{{ stats.in_progress }}</h3>
+        <p>In Progress</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon success">✅</div>
+      <div class="stat-info">
+        <h3>{{ stats.resolved_today }}</h3>
+        <p>Resolved Today</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Views & Filter Bar -->
+  <div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem;">
+    <!-- View Switcher Tabs -->
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem; flex-wrap: wrap;">
+      <a href="{{ url_for('department_dashboard', dept=dept, view='unresolved') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unresolved' or not current_view %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
+        ⏳ Unresolved Problems ({{ unresolved_count }})
+      </a>
+      <a href="{{ url_for('department_dashboard', dept=dept, view='recent') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'recent' %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
+        🆕 Recently Added
+      </a>
+      <a href="{{ url_for('department_dashboard', dept=dept, view='all') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'all' %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
+        📋 All Department Problems ({{ total_dept_count }})
+      </a>
+    </div>
+
+    <!-- Filter and Search Bar -->
+    <form method="GET" action="{{ url_for('department_dashboard') }}" class="filter-bar" style="margin: 0; padding: 0; background: transparent;">
+      <input type="hidden" name="dept" value="{{ dept }}">
+      <input type="hidden" name="view" value="{{ current_view }}">
+      
+      <div style="flex-grow: 1; min-width: 240px;">
+        <input type="text" name="search" class="form-control" placeholder="🔍 Search query title, submitter, ID..." value="{{ search_query }}">
+      </div>
+
+      <div>
+        <select name="priority" class="form-control" onchange="this.form.submit()">
+          <option value="">All Priorities</option>
+          {% for p in PRIORITIES %}
+          <option value="{{ p }}" {% if current_priority == p %}selected{% endif %}>{{ p }} Priority</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <select name="status" class="form-control" onchange="this.form.submit()">
+          <option value="">All Statuses</option>
+          {% for s in STATUSES %}
+          <option value="{{ s }}" {% if current_status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-primary">Search</button>
+      {% if search_query or current_priority or current_status %}
+      <a href="{{ url_for('department_dashboard', dept=dept, view=current_view) }}" class="btn btn-secondary">Reset</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Query Queue Table (Urgent First) -->
+  <div class="table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Query ID</th>
+          <th>Priority</th>
+          <th>Title & Category</th>
+          <th>Submitter</th>
+          <th>Status</th>
+          <th>Assigned Staff</th>
+          <th>Submitted</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if queries %}
+          {% for q in queries %}
+          <tr {% if q.priority == 'Urgent' and q.status != 'Resolved' %}style="background-color: #fff1f2;"{% endif %}>
+            <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
+            <td>
+              <span class="badge badge-{{ q.priority | lower }}">
+                {% if q.priority == 'Urgent' %}🚨{% endif %} {{ q.priority }}
+              </span>
+            </td>
+            <td>
+              <a href="{{ url_for('query_details', query_id=q.id) }}" style="font-weight: 600; color: var(--text-main); display: block;">
+                {{ q.title }}
+              </a>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">{{ q.category }}</span>
+            </td>
+            <td>
+              <div style="font-weight: 700; color: var(--text-main);">
+                {% if q.user_role == 'student' %}👨‍🎓 Student
+                {% elif q.user_role == 'faculty' %}👩‍🏫 Faculty
+                {% else %}👤 {{ q.user_role | capitalize }}{% endif %}
+              </div>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">
+                {% if q.user_role == 'student' %}
+                  {{ q.course or 'Campus' }}{% if q.year %} (Yr {{ q.year }}){% endif %}
+                {% else %}
+                  {{ q.department or 'Campus' }}
+                {% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
+            </td>
+            <td>
+              {% if q.staff_name %}
+                <span style="font-size: 0.85rem; font-weight: 600;">🏢 Staff ({{ q.department }})</span>
+              {% else %}
+                <span style="font-size: 0.8rem; color: var(--warning); font-weight: 600;">⚠️ Unassigned</span>
+              {% endif %}
+            </td>
+            <td style="font-size: 0.8rem; color: var(--text-muted);">
+              {{ q.created_at | timeago }}
+            </td>
+            <td>
+              <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-primary btn-sm">
+                Open & Reply →
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="8" style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
+              <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
+              <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--text-main);">Queue is Clear</h3>
+              <p style="font-size: 0.85rem; margin-top: 4px;">No queries currently matching the selected filters for {{ dept }} Department.</p>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}

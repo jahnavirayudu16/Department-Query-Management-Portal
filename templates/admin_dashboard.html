@@ -1,0 +1,390 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Central Administration Cockpit{% endblock %}
+
+{% block content %}
+<div style="max-width: 1260px; margin: 0 auto;">
+
+  <!-- Hero Header -->
+  <div class="hero-card" style="padding: 1.75rem 2.25rem; margin-bottom: 2rem; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <span class="badge badge-status-waiting" style="background: rgba(255,255,255,0.2); color: #fff; border: none; margin-bottom: 0.35rem;">
+          ⚡ Central Administration Cockpit
+        </span>
+        <h1 style="font-size: 1.8rem; margin-bottom: 0.25rem; color: #ffffff;">Central Admin Control Panel</h1>
+        <p style="font-size: 0.88rem; color: #c7d2fe; margin: 0;">
+          Manage staff assignments, set query priorities, re-route departments, and monitor all campus queries across the 3 categories.
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem;">
+        <a href="{{ url_for('admin_users') }}" class="btn btn-secondary btn-sm" style="background: #ffffff; color: #1e1b4b; font-weight: 700;">
+          👥 Users Directory
+        </a>
+        <a href="{{ url_for('admin_analytics') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.15); color: #ffffff; border-color: rgba(255,255,255,0.3); font-weight: 700;">
+          📈 Analytics Charts
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Statistics Summary -->
+  <div class="stats-grid" style="margin-bottom: 2rem;">
+    <div class="stat-card">
+      <div class="stat-icon primary">👥</div>
+      <div class="stat-info">
+        <h3 class="counter" data-target="{{ stats.total_users }}">{{ stats.total_users }}</h3>
+        <p>Total Registered Users</p>
+        <div style="font-size: 0.72rem; color: var(--text-light); margin-top: 3px; font-weight: 600;">
+          {{ stats.students }} Stu • {{ stats.faculty }} Fac • {{ stats.staff }} Staff
+        </div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon secondary">📋</div>
+      <div class="stat-info">
+        <h3>{{ stats.total_queries }}</h3>
+        <p>Total Queries Filed</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon warning">⏳</div>
+      <div class="stat-info">
+        <h3>{{ stats.pending_queries }}</h3>
+        <p>Unresolved Problems</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon danger">🚨</div>
+      <div class="stat-info">
+        <h3>{{ stats.urgent_queries }}</h3>
+        <p>Urgent Cases</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon success">✅</div>
+      <div class="stat-info">
+        <h3>{{ stats.resolved_queries }}</h3>
+        <p>Resolved Queries</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROMINENT LARGE 3 CATEGORY CARDS (Academics, Administrative, Others) -->
+  <div style="margin-bottom: 2.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <div>
+        <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0;">
+          🏢 Core Category Desks
+        </h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+          Workload, pending problems, and staff allocation across the 3 wings
+        </p>
+      </div>
+      <a href="{{ url_for('admin_departments') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
+        ⚙️ Manage Categories & Heads →
+      </a>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem;">
+      {% for cat in category_cards %}
+      <div class="card" style="border-top: 5px solid {{ cat.color }}; padding: 1.75rem; background: #ffffff; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <span style="font-size: 2rem;">{{ cat.icon }}</span>
+              <div>
+                <h3 style="font-size: 1.3rem; font-weight: 800; color: #0f172a; margin: 0;">
+                  {{ cat.name }} Wing
+                </h3>
+                <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">
+                  Lead: {{ cat.head_name }}
+                </span>
+              </div>
+            </div>
+            {% if cat.urgent > 0 %}
+            <span class="badge badge-urgent" style="font-size: 0.75rem;">🚨 {{ cat.urgent }} Urgent</span>
+            {% endif %}
+          </div>
+
+          <p style="font-size: 0.84rem; color: #475569; line-height: 1.45; margin-bottom: 1.25rem;">
+            {{ cat.tagline }}
+          </p>
+
+          <!-- Metrics Grid inside Card -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); padding: 0.75rem; margin-bottom: 1.25rem; text-align: center;">
+            <div>
+              <div style="font-size: 1.25rem; font-weight: 800; color: var(--primary);">{{ cat.total }}</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Total</div>
+            </div>
+            <div>
+              <div style="font-size: 1.25rem; font-weight: 800; color: #d97706;">{{ cat.unresolved }}</div>
+              <div style="font-size: 0.72rem; color: #d97706; font-weight: 700; text-transform: uppercase;">Unresolved</div>
+            </div>
+            <div>
+              <div style="font-size: 1.25rem; font-weight: 800; color: var(--success);">{{ cat.resolved }}</div>
+              <div style="font-size: 0.72rem; color: var(--success); font-weight: 700; text-transform: uppercase;">Resolved</div>
+            </div>
+          </div>
+        </div>
+
+        <a href="{{ url_for('department_dashboard', dept=cat.name) }}" class="btn btn-secondary btn-sm" style="width: 100%; text-align: center; font-weight: 700; justify-content: center; background: #f8fafc;">
+          Open {{ cat.name }} Queue & Staff →
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- PROBLEMS MANAGEMENT SECTION: Unresolved, Recently Added, All Problems -->
+  <div class="card" style="padding: 1.5rem;">
+    
+    <!-- Tab Navigation Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button id="tabBtnUnresolved" onclick="showAdminTab('unresolved')" class="btn btn-sm" style="font-weight: 800; background: var(--primary); color: #fff; border: none; padding: 0.5rem 1rem;">
+          ⏳ Unresolved Problems ({{ unresolved_queries | length }})
+        </button>
+        <button id="tabBtnRecent" onclick="showAdminTab('recent')" class="btn btn-sm" style="font-weight: 800; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 0.5rem 1rem;">
+          🆕 Recently Added ({{ recent_queries | length }})
+        </button>
+        <button id="tabBtnAll" onclick="showAdminTab('all')" class="btn btn-sm" style="font-weight: 800; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 0.5rem 1rem;">
+          📋 All Problems ({{ all_queries | length }})
+        </button>
+      </div>
+
+      <div style="font-size: 0.82rem; color: var(--text-muted);">
+        Click <strong>Review & Assign Staff</strong> to assign department personnel
+      </div>
+    </div>
+
+    <!-- 1. UNRESOLVED PROBLEMS TAB -->
+    <div id="tabContentUnresolved" class="admin-tab-content">
+      {% if unresolved_queries %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Priority</th>
+              <th>Problem Title</th>
+              <th>Category / Wing</th>
+              <th>Submitter</th>
+              <th>Assigned Staff</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for q in unresolved_queries %}
+            <tr {% if q.priority == 'Urgent' %}style="background-color: #fff1f2;"{% endif %}>
+              <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
+              <td>
+                <span class="badge badge-{{ q.priority | lower }}">
+                  {% if q.priority == 'Urgent' %}🚨{% endif %} {{ q.priority }}
+                </span>
+              </td>
+              <td>
+                <a href="{{ url_for('query_details', query_id=q.id) }}" style="font-weight: 700; color: #0f172a;">
+                  {{ q.title }}
+                </a>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+                  Filed {{ q.created_at | timeago }}
+                </div>
+              </td>
+              <td>
+                <span class="badge badge-status-assigned">🏢 {{ q.department }}</span>
+              </td>
+              <td>
+                <div style="font-weight: 700;">
+                  {% if q.user_role == 'student' %}👨‍🎓 Student
+                  {% elif q.user_role == 'faculty' %}👩‍🏫 Faculty
+                  {% else %}👤 {{ q.user_role | capitalize }}{% endif %}
+                </div>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">Protected Submitter</span>
+              </td>
+              <td>
+                {% if q.staff_name %}
+                  <strong style="color: var(--primary); font-size: 0.85rem;">👤 {{ q.staff_name }}</strong>
+                {% else %}
+                  <span class="badge badge-urgent" style="font-size: 0.72rem;">⚠️ Unassigned</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-primary btn-sm" style="font-weight: 700; white-space: nowrap;">
+                  Review & Assign Staff →
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+        ✨ Fantastic! There are no unresolved queries pending right now.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- 2. RECENTLY ADDED PROBLEMS TAB -->
+    <div id="tabContentRecent" class="admin-tab-content" style="display: none;">
+      {% if recent_queries %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Priority</th>
+              <th>Problem Title</th>
+              <th>Category / Wing</th>
+              <th>Submitter</th>
+              <th>Assigned Staff</th>
+              <th>Status</th>
+              <th>Date Filed</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for q in recent_queries %}
+            <tr>
+              <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
+              <td>
+                <span class="badge badge-{{ q.priority | lower }}">{{ q.priority }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('query_details', query_id=q.id) }}" style="font-weight: 700; color: #0f172a;">
+                  {{ q.title }}
+                </a>
+              </td>
+              <td>
+                <span class="badge badge-status-assigned">🏢 {{ q.department }}</span>
+              </td>
+              <td>
+                <div style="font-weight: 700;">
+                  {% if q.user_role == 'student' %}👨‍🎓 Student
+                  {% elif q.user_role == 'faculty' %}👩‍🏫 Faculty
+                  {% else %}👤 {{ q.user_role | capitalize }}{% endif %}
+                </div>
+              </td>
+              <td>
+                {% if q.staff_name %}
+                  <span style="color: var(--primary); font-weight: 600;">👤 {{ q.staff_name }}</span>
+                {% else %}
+                  <span class="badge badge-urgent" style="font-size: 0.72rem;">⚠️ Unassigned</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
+              </td>
+              <td style="font-size: 0.8rem; color: var(--text-muted);">
+                {{ q.created_at | timeago }}
+              </td>
+              <td>
+                <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-secondary btn-sm" style="font-weight: 700; white-space: nowrap;">
+                  Review & Assign →
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+        No recently added queries found.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- 3. ALL PROBLEMS TAB -->
+    <div id="tabContentAll" class="admin-tab-content" style="display: none;">
+      {% if all_queries %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Priority</th>
+              <th>Problem Title</th>
+              <th>Category</th>
+              <th>Submitter</th>
+              <th>Assigned Staff</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for q in all_queries %}
+            <tr>
+              <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
+              <td>
+                <span class="badge badge-{{ q.priority | lower }}">{{ q.priority }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('query_details', query_id=q.id) }}" style="font-weight: 700; color: #0f172a;">
+                  {{ q.title }}
+                </a>
+              </td>
+              <td>
+                <span class="badge badge-status-assigned">🏢 {{ q.department }}</span>
+              </td>
+              <td>
+                <span style="font-weight: 600;">{{ q.user_role | capitalize }}</span>
+              </td>
+              <td>
+                {% if q.staff_name %}
+                  <span style="color: var(--primary); font-weight: 600;">👤 {{ q.staff_name }}</span>
+                {% else %}
+                  <span style="color: var(--warning); font-size: 0.8rem;">Unassigned</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
+              </td>
+              <td>
+                <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-secondary btn-sm" style="font-weight: 700; white-space: nowrap;">
+                  Details →
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+        No queries available.
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function showAdminTab(tabKey) {
+  const tabs = ['unresolved', 'recent', 'all'];
+  tabs.forEach(t => {
+    const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+    const content = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (t === tabKey) {
+      btn.style.background = 'var(--primary)';
+      btn.style.color = '#ffffff';
+      btn.style.border = 'none';
+      content.style.display = 'block';
+    } else {
+      btn.style.background = '#f1f5f9';
+      btn.style.color = '#334155';
+      btn.style.border = '1px solid #cbd5e1';
+      content.style.display = 'none';
+    }
+  });
+}
+</script>
+{% endblock %}

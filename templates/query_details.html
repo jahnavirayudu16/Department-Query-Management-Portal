@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Query #{{ query.id }}: {{ query.title }}{% endblock %}
+
+{% block extra_head %}
+<script src="{{ url_for('static', filename='js/chat.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto;">
+
+  <!-- Header & Back Navigation -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <a href="{{ url_for('department_dashboard') if current_user.role == 'staff' else (url_for('admin_dashboard') if current_user.role == 'admin' else url_for('dashboard')) }}" class="btn btn-secondary btn-sm">
+        ← Back to List
+      </a>
+      <h1 style="font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin: 0;">
+        Query #{{ query.id }}
+      </h1>
+      <span class="badge badge-{{ query.priority | lower }}">{{ query.priority }} Priority</span>
+      <span id="queryStatusBadge" class="badge badge-status-{{ query.status | lower | replace(' ', '-') }}">{{ query.status }}</span>
+    </div>
+  </div>
+
+  <!-- Main Grid: Left Chat & Timeline, Right Query Meta & Actions -->
+  <div style="display: grid; grid-template-columns: 1fr 360px; gap: 1.5rem; align-items: start;">
+    
+    <!-- LEFT COLUMN: Conversation Stream -->
+    <div>
+      
+      <!-- Query Description Header Card -->
+      <div class="card" style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.2rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem;">
+          {{ query.title }}
+        </h2>
+        <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+          <span>👤 <strong>{{ query.user_role | capitalize }}</strong> (Protected Submitter)</span>
+          <span>🏢 <strong>{{ query.department }} Wing</strong></span>
+          <span>📂 {{ query.category }}</span>
+          <span>🕒 {{ query.created_at | timeago }}</span>
+        </div>
+        <div style="background: #f8fafc; border-left: 4px solid var(--primary); padding: 1rem; border-radius: var(--radius-sm); font-size: 0.95rem; line-height: 1.6; color: var(--text-main);">
+          {{ query.description }}
+        </div>
+      </div>
+
+      <!-- Real-Time Chat Container -->
+      <div class="chat-container" id="chatContainer" data-query-id="{{ query.id }}" data-user-id="{{ current_user.id }}" data-user-name="{{ current_user.role | capitalize }}">
+        <div class="chat-header">
+          <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+            <span>💬 Live Query Communication</span>
+            <span style="font-size: 0.72rem; color: var(--success); font-weight: 600;">● Real-time Active</span>
+          </div>
+          <div id="typingStatus" style="font-size: 0.75rem; color: var(--text-muted); font-style: italic; display: none;"></div>
+        </div>
+
+        <!-- Chat Stream -->
+        <div class="chat-messages" id="chatMessages">
+          {% for m in messages %}
+          <div class="message-bubble {% if m.sender_id == current_user.id %}sent{% else %}received{% endif %} {% if m.is_internal_note %}internal-note{% endif %}">
+            <div class="message-meta">
+              <strong>
+                {% if m.sender_role == 'student' %}Student
+                {% elif m.sender_role == 'faculty' %}Faculty Member
+                {% elif m.sender_role == 'staff' %}Department Staff
+                {% else %}Administrator{% endif %}
+              </strong>
+              <span class="badge badge-sm {% if m.sender_role == 'student' %}badge-low{% elif m.sender_role == 'faculty' %}badge-medium{% else %}badge-status-assigned{% endif %}">
+                {{ m.sender_role | upper }}
+              </span>
+              <span>{{ m.created_at | timeago }}</span>
+              {% if m.is_internal_note %}
+              <span class="badge badge-urgent">Internal Staff Note</span>
+              {% endif %}
+            </div>
+            <div class="message-body">
+              {{ m.message }}
+              {% if m.attachment_filename %}
+              <div style="margin-top: 8px; font-size: 0.8rem; background: rgba(0,0,0,0.05); padding: 6px 10px; border-radius: 6px;">
+                📎 <a href="{{ url_for('download_attachment', filename=m.attachment_path) }}" target="_blank" style="font-weight: 600; text-decoration: underline;">{{ m.attachment_filename }}</a>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <!-- Chat Input Form (Staff and Student/Faculty Only; Admin has no chat input) -->
+        {% if current_user.role != 'admin' %}
+        <div class="chat-input-area">
+          <form id="chatForm" method="POST" action="{{ url_for('post_message', query_id=query.id) }}" enctype="multipart/form-data">
+            <div style="display: flex; flex-direction: column; width: 100%; gap: 0.5rem;">
+              
+              {% if current_user.role == 'staff' %}
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #b45309;">
+                <input type="checkbox" id="internalNoteCheck" name="is_internal_note" value="true">
+                <label for="internalNoteCheck" style="cursor: pointer; font-weight: 600;">🔒 Post as Private Internal Note (Staff Only)</label>
+              </div>
+              {% endif %}
+
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="text" id="messageInput" name="message" class="form-control" placeholder="Type your response or question here..." autocomplete="off">
+                
+                <label for="chatAttachment" class="btn btn-secondary" style="padding: 0.7rem 0.9rem; cursor: pointer;" title="Attach file">
+                  📎
+                  <input type="file" id="chatAttachment" name="attachment" style="display: none;" onchange="this.parentElement.style.borderColor='#4f46e5'">
+                </label>
+
+                <button type="submit" class="btn btn-primary" style="padding: 0.7rem 1.25rem;">
+                  Send
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+        {% else %}
+        <div style="padding: 1rem; background: #f8fafc; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-muted); font-size: 0.85rem; font-weight: 600;">
+          🛡️ Central Admin Monitor Mode: Direct chat is handled by the assigned Department Staff and Submitter.
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Actions & Query Information -->
+    <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+
+      <!-- CENTRAL ADMIN CONTROLS: Staff Assignment, Priority, Re-route & Staff Details -->
+      {% if current_user.role == 'admin' %}
+      <div class="card" style="border-top: 4px solid var(--primary); background: #ffffff;">
+        <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 1rem; color: #1e1b4b; display: flex; align-items: center; gap: 0.4rem;">
+          ⚡ Central Admin Assignment Desk
+        </h3>
+
+        <!-- Assignment & Re-Routing Form -->
+        <form method="POST" action="{{ url_for('reassign_query', query_id=query.id) }}">
+          
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 700;">Assign Staff Member *</label>
+            <select name="assigned_staff_id" class="form-control" style="font-size: 0.85rem;">
+              <option value="">-- Select Staff to Assign --</option>
+              {% for s in dept_staff %}
+              <option value="{{ s.id }}" {% if query.assigned_staff_id == s.id %}selected{% endif %}>
+                👤 {{ s.name }} ({{ s.department or 'Central' }} Staff)
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 700;">Priority Level</label>
+            <select name="priority" class="form-control" style="font-size: 0.85rem;">
+              <option value="High" {% if query.priority == 'High' %}selected{% endif %}>High Priority</option>
+              <option value="Medium" {% if query.priority == 'Medium' %}selected{% endif %}>Medium Priority</option>
+              <option value="Low" {% if query.priority == 'Low' %}selected{% endif %}>Low Priority</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 700;">Re-Route Department</label>
+            <select name="department" class="form-control" style="font-size: 0.85rem;">
+              {% for d in DEPARTMENTS %}
+              <option value="{{ d }}" {% if query.department == d %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-sm" style="width: 100%; font-weight: 700; padding: 0.6rem;">
+            💾 Save Staff Assignment & Priority
+          </button>
+        </form>
+      </div>
+
+      <!-- Assigned Staff Member Detailed Profile Card (For Admin) -->
+      <div class="card" style="background: #f8fafc; border: 1px solid var(--border-color);">
+        <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-main);">
+          👤 Assigned Staff Details
+        </h3>
+        {% if query.staff_name %}
+        <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.4rem;">
+          <div><strong>Name:</strong> {{ query.staff_name }}</div>
+          <div><strong>Department:</strong> {{ query.staff_department or query.department }}</div>
+          <div><strong>Email:</strong> {{ query.staff_email or 'N/A' }}</div>
+          {% if query.staff_designation %}
+          <div><strong>Designation:</strong> {{ query.staff_designation }}</div>
+          {% endif %}
+        </div>
+        {% else %}
+        <p style="font-size: 0.85rem; color: var(--warning); margin: 0; font-weight: 600;">
+          ⚠️ No staff assigned yet. Please assign a staff member above.
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- DEPARTMENT STAFF CONTROLS: Query Resolution & Status Update -->
+      {% if current_user.role == 'staff' %}
+      <div class="card" style="border-top: 4px solid var(--success); background: #ffffff;">
+        <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 1rem; color: #166534;">
+          ⚙️ Staff Query Resolution
+        </h3>
+        
+        <!-- Status Update Form -->
+        <form method="POST" action="{{ url_for('update_query_status', query_id=query.id) }}">
+          <div class="form-group">
+            <label class="form-label" style="font-weight: 700;">Update Resolution Status</label>
+            <select name="status" class="form-control" style="font-size: 0.88rem; margin-bottom: 0.75rem;">
+              {% for s in STATUSES %}
+              <option value="{{ s }}" {% if query.status == s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-success btn-sm" style="width: 100%; font-weight: 700; padding: 0.6rem;">
+              ✅ Update Query Status
+            </button>
+          </div>
+        </form>
+      </div>
+      {% endif %}
+
+      <!-- Query Details Summary Card -->
+      <div class="card">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.85rem;">📋 Query Information</h3>
+        
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem;">
+          <div>
+            <span style="color: var(--text-muted); display: block; font-size: 0.75rem;">SUBMITTER</span>
+            <strong>{{ query.user_role | capitalize }}</strong><br>
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Protected Anonymous Identity</span>
+          </div>
+
+          <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
+            <span style="color: var(--text-muted); display: block; font-size: 0.75rem;">ASSIGNED STAFF</span>
+            {% if query.staff_name %}
+              <strong style="color: var(--primary);">👤 {{ query.staff_name }}</strong><br>
+              <span style="color: var(--text-muted); font-size: 0.8rem;">{{ query.department }} Staff</span>
+            {% else %}
+              <span style="color: var(--warning); font-weight: 600;">Unassigned</span>
+            {% endif %}
+          </div>
+
+          <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
+            <span style="color: var(--text-muted); display: block; font-size: 0.75rem;">DATE FILED</span>
+            <div><strong>{{ query.created_at }}</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attachments Card -->
+      {% if attachments %}
+      <div class="card">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem;">📎 Attachments ({{ attachments | length }})</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          {% for a in attachments %}
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: #f8fafc; border-radius: var(--radius-sm); font-size: 0.82rem;">
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;">{{ a.original_filename }}</span>
+            <a href="{{ url_for('download_attachment', filename=a.filename) }}" target="_blank" class="btn btn-secondary btn-sm" style="padding: 2px 8px;">
+              Download
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Audit History Logs (For Staff and Admin) -->
+      {% if audit_logs and current_user.role in ['staff', 'admin'] %}
+      <div class="card">
+        <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem;">📜 Activity Audit Trail</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto;">
+          {% for log in audit_logs %}
+          <div style="font-size: 0.78rem; border-left: 2px solid #cbd5e1; padding-left: 8px;">
+            <div style="font-weight: 600;">{{ log.action }}</div>
+            <div style="color: var(--text-muted);">{{ log.details }}</div>
+            <div style="color: var(--text-light); font-size: 0.7rem;">{{ log.created_at | timeago }} by {{ log.actor_name }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
