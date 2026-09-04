@@ -319,6 +319,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const firstId = parseInt(firstCard.dataset.id);
     selectHod(firstId);
   }
+
+  // Handle Enter keypress on input field
+  document.getElementById('adminHodInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendAdminHodMessage(e);
+    }
+  });
 });
 
 /* Socket.IO Connection & Real-Time Presence */

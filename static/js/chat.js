@@ -77,15 +77,26 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Typing indicator broadcast
+    // Typing indicator broadcast & Enter key press submission
     let typingTimeout;
     if (messageInput) {
+      messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (chatForm) {
+            chatForm.requestSubmit ? chatForm.requestSubmit() : chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+          }
+        }
+      });
+
       messageInput.addEventListener('input', () => {
-        socket.emit('typing_indicator', { query_id: queryId, user_name: currentUserName, is_typing: true });
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-          socket.emit('typing_indicator', { query_id: queryId, user_name: currentUserName, is_typing: false });
-        }, 1500);
+        if (socket) {
+          socket.emit('typing_indicator', { query_id: queryId, user_name: currentUserName, is_typing: true });
+          clearTimeout(typingTimeout);
+          typingTimeout = setTimeout(() => {
+            socket.emit('typing_indicator', { query_id: queryId, user_name: currentUserName, is_typing: false });
+          }, 1500);
+        }
       });
     }
 

@@ -413,19 +413,15 @@ function onFacultyRoleTypeChange(roleType) {
     onFacLevelChange();
   } else {
     facultyCategoryGroup.style.display = 'block';
-    onFacultyCategoryChange();
+    facultyAcademicCascadeGroup.style.display = 'block';
+    onFacLevelChange();
   }
 }
 
 function onFacultyCategoryChange() {
-  const cat = document.getElementById('facultyCategorySelect').value;
   const cascadeGroup = document.getElementById('facultyAcademicCascadeGroup');
-  if (cat === 'Academics') {
-    cascadeGroup.style.display = 'block';
-    onFacLevelChange();
-  } else {
-    cascadeGroup.style.display = 'none';
-  }
+  cascadeGroup.style.display = 'block';
+  onFacLevelChange();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

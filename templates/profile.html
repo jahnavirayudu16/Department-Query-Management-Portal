@@ -44,7 +44,7 @@
           <input type="email" class="form-control" value="{{ user.email }}" disabled style="background: #f1f5f9; cursor: not-allowed;">
         </div>
 
-        {% if user.role == 'student' and user.course %}
+        {% if user.role in ['student', 'faculty', 'hod'] and user.course %}
         <div class="form-group">
           <label class="form-label">Course / Degree Program</label>
           <input type="text" class="form-control" value="{{ user.course }} {% if user.year %}(Year {{ user.year }}){% endif %}" disabled style="background: #f1f5f9;">

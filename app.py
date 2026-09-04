@@ -330,15 +330,12 @@ def register():
             else:
                 # Faculty Resolver
                 fac_cat = request.form.get('faculty_category', 'Academics').strip()
-                if fac_cat == 'Academics':
-                    level = request.form.get('fac_level', 'UG').strip()
-                    course = request.form.get('fac_course', 'B.Tech').strip()
-                    department = request.form.get('fac_department', '').strip()
-                else:
-                    level = None
-                    course = None
+                level = request.form.get('fac_level', 'UG').strip()
+                course = request.form.get('fac_course', 'B.Tech').strip()
+                department = request.form.get('fac_department', '').strip()
+                if not department:
                     department = fac_cat
-                designation = request.form.get('designation', '').strip() or f"Faculty Member ({department or 'Department'})"
+                designation = request.form.get('designation', '').strip() or f"Faculty Member ({department})"
                 name = name or 'Faculty Member'
         
         phone = request.form.get('phone', '').strip()
