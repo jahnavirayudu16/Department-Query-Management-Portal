@@ -85,7 +85,6 @@ function triggerNativeNotification(title, body, url = window.location.href) {
 function initSocketGlobal() {
   if (typeof io === 'undefined') return;
 
-  const socket = io();
   const userRole = document.body.dataset.userRole;
   const userDept = document.body.dataset.userDept;
   const userId = document.body.dataset.userId;
