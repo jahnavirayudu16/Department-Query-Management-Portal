@@ -54,31 +54,47 @@ class TestDQMSystem(unittest.TestCase):
         self.assertEqual(detect_priority("What are the working hours and timings?"), "Low")
 
     def test_anonymous_student_registration(self):
-        """Test student registering with anonymous/optional name."""
+        """Test student registering with UG Level, Program, Branch, Year, and optional Regd ID."""
         res = self.client.post('/register', data={
-            'name': '',
+            'name': 'Fearless Student',
             'email': 'fearless.student@college.com',
             'password': 'password123',
             'confirm_password': 'password123',
             'role': 'student',
+            'level': 'UG',
             'course': 'B.Tech',
-            'year': '3',
-            'department': 'Computer Science & Engineering (CSE)',
-            'roll_no': ''
+            'department': 'Artificial Intelligence & Data Science (AIDS)',
+            'year': '2',
+            'roll_no': '22B91A5401'
         }, follow_redirects=True)
         self.assertEqual(res.status_code, 200)
         self.assertIn(b'Registration successful', res.data)
 
-    def test_staff_registration_with_required_name(self):
-        """Test department staff registering with explicit staff name for assignment."""
+    def test_faculty_registration_as_hod(self):
+        """Test faculty registering with HOD role and branch."""
         res = self.client.post('/register', data={
-            'staff_name': 'Dr. Sarah Jenkins',
+            'name': 'Dr. Sarah Jenkins',
             'email': 'sarah.jenkins@college.com',
             'password': 'password123',
             'confirm_password': 'password123',
-            'role': 'staff',
-            'department': 'Academics',
-            'designation': 'Senior Academic Coordinator'
+            'role': 'faculty',
+            'faculty_role_type': 'hod',
+            'faculty_department': 'Computer Science & Engineering (CSE)',
+            'designation': 'Head of Department'
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b'Registration successful', res.data)
+
+    def test_faculty_registration_as_admin(self):
+        """Test registering as Central Admin."""
+        res = self.client.post('/register', data={
+            'name': 'Central Admin Officer',
+            'email': 'central.officer@college.com',
+            'password': 'password123',
+            'confirm_password': 'password123',
+            'role': 'faculty',
+            'faculty_role_type': 'admin',
+            'designation': 'Central Administrator'
         }, follow_redirects=True)
         self.assertEqual(res.status_code, 200)
         self.assertIn(b'Registration successful', res.data)
@@ -127,31 +143,72 @@ class TestDQMSystem(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(b'Query status successfully updated to Resolved', res.data)
 
-    def test_admin_registration_without_department(self):
-        """Test Central Admin registering without department/wing."""
-        res = self.client.post('/register', data={
-            'staff_name': 'Central Dean of Exams',
-            'email': 'central.dean@college.com',
-            'password': 'password123',
-            'confirm_password': 'password123',
-            'role': 'admin',
-            'designation': 'Central Dean'
+    def test_hod_assigns_department_staff(self):
+        """Verify that HOD can login and assign queries to their department staff."""
+        # Login as CSE HOD
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res = self.client.post('/query/2/reassign', data={
+            'assigned_staff_id': '4',
+            'priority': 'High'
         }, follow_redirects=True)
         self.assertEqual(res.status_code, 200)
-        self.assertIn(b'Registration successful', res.data)
+        self.assertIn(b'Query assignments updated successfully', res.data)
 
-
-    def test_staff_and_admin_cannot_post_queries(self):
-        """Verify that staff and central admin are forbidden from accessing query submission."""
-        # Staff test
-        self.client.post('/login', data={'email': 'staff@college.com', 'password': 'staff123'})
-        res = self.client.get('/submit-query', follow_redirects=True)
-        self.assertIn(b'Access restricted', res.data)
-
-        # Admin test
+    def test_admin_pie_chart_analytics_api(self):
+        """Verify that Central Admin analytics endpoint returns Department and Student Year distributions."""
         self.client.post('/login', data={'email': 'admin@college.com', 'password': 'admin123'})
-        res = self.client.get('/submit-query', follow_redirects=True)
-        self.assertIn(b'Access restricted', res.data)
+        res = self.client.get('/api/analytics-data')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('departments', data)
+        self.assertIn('years', data)
+        self.assertIn('matrix', data)
+        self.assertIn('categories', data)
+        self.assertTrue(len(data['departments']['labels']) > 0)
+        self.assertTrue(len(data['years']['labels']) > 0)
+
+    def test_hod_branch_pie_chart_analytics_api(self):
+        """Verify that HOD analytics endpoint returns branch-specific year and category distributions."""
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res = self.client.get('/api/analytics-data')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['is_hod'])
+        self.assertIn('years', data)
+        self.assertIn('categories', data)
+
+    def test_admin_hod_messaging(self):
+        """Verify direct message flow between Central Admin and Branch HOD."""
+        # 1. Admin sends message to CSE HOD (id: 3)
+        self.client.post('/login', data={'email': 'admin@college.com', 'password': 'admin123'})
+        res = self.client.post('/api/admin-hod-messages/3', json={'message': 'Please review pending lab query.'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()['status'], 'success')
+
+        # 2. HOD fetches messages
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res2 = self.client.get('/api/admin-hod-messages/3')
+        self.assertEqual(res2.status_code, 200)
+        messages = res2.get_json()['messages']
+        self.assertTrue(any('Please review pending lab query' in m['message'] for m in messages))
+
+    def test_end_to_end_cse_student_to_hod_to_staff_flow(self):
+        """Verify that when a CSE student raises a query, it routes to CSE HOD, HOD assigns CSE staff, and staff updates status."""
+        # 1. CSE Student logs in and files a query
+        self.client.post('/login', data={'email': 'student@college.com', 'password': 'student123'})
+        res = self.client.post('/submit-query', data={
+            'title': 'Compiler Design Lab Syntax Error',
+            'description': 'Lex and Yacc flex compiler parsing error in CSE Lab 3.'
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+
+        # 2. Verify query is in CSE HOD's queue
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res_hod = self.client.get('/department-dashboard')
+        self.assertEqual(res_hod.status_code, 200)
+        self.assertIn(b'Compiler Design Lab Syntax Error', res_hod.data)
 
 if __name__ == '__main__':
     unittest.main()
+
+

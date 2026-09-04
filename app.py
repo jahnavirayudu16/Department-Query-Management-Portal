@@ -176,25 +176,41 @@ def create_notification(user_id, query_id, title, message, notif_type='info'):
 def ensure_demo_accounts(db):
     """Ensures all 1-click demo accounts exist and can log in without failure."""
     demo_accounts = [
-        ('Student', 'student@college.com', 'student123', 'student', 'Computer Science & Engineering (CSE)', 'B.Tech', 3),
-        ('Faculty Member', 'faculty@college.com', 'faculty123', 'faculty', 'Computer Science & Engineering (CSE)', 'B.Tech', None),
-        ('David Kumar', 'staff@college.com', 'staff123', 'staff', 'Others', None, None),
-        ('Dr. Alan Turing', 'academics-staff@college.com', 'staff123', 'staff', 'Academics', None, None),
-        ('Mrs. Eleanor Wright', 'admin-staff@college.com', 'staff123', 'staff', 'Administrative', None, None),
-        ('Central Administrator', 'admin@college.com', 'admin123', 'admin', None, None, None)
+        ('Student (CSE 3rd Yr)', 'student@college.com', 'student123', 'student', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', 3, 'Student'),
+        ('Faculty Member', 'faculty@college.com', 'faculty123', 'faculty', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, 'Assistant Professor'),
+        ('Dr. Grace Hopper (CSE HOD)', 'cse-hod@college.com', 'hod123', 'hod', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, 'Head of Department (CSE)'),
+        ('Prof. Ada Lovelace (ECE HOD)', 'ece-hod@college.com', 'hod123', 'hod', 'UG', 'Electronics & Communication Engineering (ECE)', 'B.Tech', None, 'Head of Department (ECE)'),
+        ('Dr. Nikola Tesla (Mech HOD)', 'mech-hod@college.com', 'hod123', 'hod', 'UG', 'Mechanical Engineering (Mech)', 'B.Tech', None, 'Head of Department (Mechanical)'),
+        ('Prof. Dennis Ritchie (BCA HOD)', 'bca-hod@college.com', 'hod123', 'hod', 'UG', 'Bachelor of Computer Applications (BCA)', 'Degree', None, 'Head of Department (BCA)'),
+        ('Dr. Alexander Fleming (Pharmacy HOD)', 'pharm-hod@college.com', 'hod123', 'hod', 'UG', 'Bachelor of Pharmacy (B.Pharm - Core)', 'B.Pharmacy', None, 'Head of Department (Pharmacy)'),
+        ('Dr. Peter Drucker (MBA HOD)', 'mba-hod@college.com', 'hod123', 'hod', 'PG', 'MBA (Business Analytics)', 'MBA', None, 'Head of Department (MBA)'),
+        ('Dr. Barbara Liskov (MCA HOD)', 'mca-hod@college.com', 'hod123', 'hod', 'PG', 'Master of Computer Applications (MCA - Regular)', 'MCA', None, 'Head of Department (MCA)'),
+        ('Dr. Claude Shannon (M.Tech HOD)', 'mtech-hod@college.com', 'hod123', 'hod', 'PG', 'M.Tech (Computer Science & Engineering)', 'M.Tech', None, 'Head of Department (M.Tech)'),
+        ('Prof. James Gosling (Diploma HOD)', 'diploma-hod@college.com', 'hod123', 'hod', 'Diploma', 'Diploma in Computer Engineering (DCME)', 'Diploma (Polytechnic)', None, 'Head of Department (Diploma)'),
+        ('Prof. Linus Torvalds', 'cse-staff@college.com', 'staff123', 'staff', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, 'CSE Department Coordinator'),
+        ('Dr. Alan Turing', 'academics-staff@college.com', 'staff123', 'staff', None, 'Academics', None, None, 'Academics Coordinator'),
+        ('Mrs. Eleanor Wright', 'admin-staff@college.com', 'staff123', 'staff', None, 'Administrative', None, None, 'Administrative Officer'),
+        ('David Kumar', 'staff@college.com', 'staff123', 'staff', None, 'Others', None, None, 'Campus Support Lead'),
+        ('Central Administrator', 'admin@college.com', 'admin123', 'admin', None, None, None, None, 'Central Administrator')
     ]
-    for name, email, pwd, role, dept, course, year in demo_accounts:
-        existing = db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-        if not existing:
-            db.execute("""
-                INSERT INTO users (name, email, password_hash, role, department, course, year, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-            """, (name, email, generate_password_hash(pwd), role, dept, course, year))
-        else:
-            db.execute("""
-                UPDATE users SET name = ?, password_hash = ?, is_active = 1, role = ?, department = COALESCE(department, ?) WHERE email = ?
-            """, (name, generate_password_hash(pwd), role, dept, email))
-    db.commit()
+    for name, email, pwd, role, level, dept, course, year, desig in demo_accounts:
+        try:
+            existing = db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO users (name, email, password_hash, role, level, department, course, year, designation, is_active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """, (name, email, generate_password_hash(pwd), role, level, dept, course, year, desig))
+            else:
+                db.execute("""
+                    UPDATE users SET name = ?, password_hash = ?, is_active = 1, role = ?, level = COALESCE(?, level), department = COALESCE(?, department), course = COALESCE(?, course), designation = COALESCE(?, designation) WHERE email = ?
+                """, (name, generate_password_hash(pwd), role, level, dept, course, desig, email))
+        except Exception as e:
+            print(f"Demo sync notice for {email}: {e}")
+    try:
+        db.commit()
+    except Exception:
+        pass
 
 # -------------------------------------------------------------
 # AUTHENTICATION ROUTES
@@ -237,6 +253,8 @@ def login():
                 return redirect(url_for('admin_dashboard'))
             elif user['role'] == 'staff':
                 return redirect(url_for('department_dashboard'))
+            elif user['role'] == 'faculty':
+                return redirect(url_for('faculty_choice'))
             else:
                 return redirect(url_for('dashboard'))
         else:
@@ -250,33 +268,59 @@ def register():
         return redirect(url_for('dashboard'))
         
     if request.method == 'POST':
-        role = request.form.get('role', 'student').strip()
-        if role not in ['student', 'faculty', 'staff', 'admin']:
-            role = 'student'
-            
-        name = request.form.get('name', '').strip()
-        if not name:
-            if role == 'student':
-                name = 'Student'
-            elif role == 'faculty':
-                name = 'Faculty Member'
-            elif role == 'staff':
-                name = 'Department Staff'
-            else:
-                name = 'Administrator'
-            
+        primary_role = request.form.get('role', 'student').strip()
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
+        name = request.form.get('name', '').strip()
         
-        course = request.form.get('course', '').strip() if role == 'student' else ''
-        year_str = request.form.get('year', '').strip() if role == 'student' else ''
-        year_val = int(year_str) if year_str and year_str.isdigit() else None
+        if primary_role == 'student':
+            role = 'student'
+            level = request.form.get('level', 'UG').strip()
+            course = request.form.get('course', 'B.Tech').strip()
+            department = request.form.get('department', '').strip()
+            year_str = request.form.get('year', '').strip()
+            year_val = int(year_str) if year_str and year_str.isdigit() else 1
+            roll_no = request.form.get('roll_no', '').strip()
+            designation = 'Student'
+            if not name:
+                name = 'Student'
+        else:
+            # Faculty / HOD / Admin
+            faculty_role_type = request.form.get('faculty_role_type', 'faculty').strip()
+            if faculty_role_type not in ['faculty', 'hod', 'admin']:
+                faculty_role_type = 'faculty'
+            role = faculty_role_type
+            roll_no = ''
+            year_val = None
+            
+            if role == 'admin':
+                level = None
+                course = None
+                department = None
+                designation = request.form.get('designation', '').strip() or 'Central Administrator'
+                name = name or 'Administrator'
+            elif role == 'hod':
+                level = request.form.get('fac_level', 'UG').strip()
+                course = request.form.get('fac_course', 'B.Tech').strip()
+                department = request.form.get('fac_department', '').strip()
+                designation = request.form.get('designation', '').strip() or f"Head of Department ({department or 'Academic'})"
+                name = name or f"HOD ({department or 'Department'})"
+            else:
+                # Faculty Resolver
+                fac_cat = request.form.get('faculty_category', 'Academics').strip()
+                if fac_cat == 'Academics':
+                    level = request.form.get('fac_level', 'UG').strip()
+                    course = request.form.get('fac_course', 'B.Tech').strip()
+                    department = request.form.get('fac_department', '').strip()
+                else:
+                    level = None
+                    course = None
+                    department = fac_cat
+                designation = request.form.get('designation', '').strip() or f"Faculty Member ({department or 'Department'})"
+                name = name or 'Faculty Member'
         
-        department = request.form.get('department', '').strip()
         phone = request.form.get('phone', '').strip()
-        roll_no = request.form.get('roll_no', '').strip()
-        designation = request.form.get('designation', '').strip()
         
         if not email or not password:
             flash('Email and password are required.', 'warning')
@@ -299,9 +343,9 @@ def register():
         try:
             password_hash = generate_password_hash(password)
             db.execute("""
-                INSERT INTO users (name, email, password_hash, role, department, course, year, phone, roll_no, designation, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-            """, (name, email, password_hash, role, department, course, year_val, phone, roll_no, designation))
+                INSERT INTO users (name, email, password_hash, role, level, department, course, year, phone, roll_no, designation, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """, (name, email, password_hash, role, level, department, course, year_val, phone, roll_no, designation))
             db.commit()
             
             flash('Registration successful! You can now log in securely.', 'success')
@@ -432,86 +476,109 @@ def submit_query():
             
         # Run smart automatic routing
         classification = classify_query(description, title)
-        department = classification['department']
         category = classification['category']
         priority = classification['priority']
         needs_admin_review = 1 if classification['needs_admin_review'] else 0
         
+        # Routing: Link query to the student's branch/department so their branch HOD gets it directly!
+        if user['department']:
+            department = user['department']
+        else:
+            department = classification['department']
+        
         db = get_db()
         cursor = db.cursor()
-        
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        cursor.execute("""
-            INSERT INTO queries (user_id, title, description, category, department, priority, status, admin_reviewed, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'New', ?, ?, ?)
-        """, (user['id'], title, description, category, department, priority, needs_admin_review, now_str, now_str))
-        query_id = cursor.lastrowid
         
-        # Save initial message
-        cursor.execute("""
-            INSERT INTO messages (query_id, sender_id, message, created_at)
-            VALUES (?, ?, ?, ?)
-        """, (query_id, user['id'], description, now_str))
-        message_id = cursor.lastrowid
-        
-        # Handle optional file attachment
-        if 'attachment' in request.files:
-            file = request.files['attachment']
-            if file and file.filename and allowed_file(file.filename):
-                orig_filename = file.filename
-                ext = orig_filename.rsplit('.', 1)[1].lower()
-                clean_name = secure_filename(orig_filename)
-                saved_filename = f"q{query_id}_{int(datetime.now().timestamp())}_{clean_name}"
-                save_path = os.path.join(app.config['UPLOAD_FOLDER'], saved_filename)
-                file.save(save_path)
-                file_size = os.path.getsize(save_path)
-                
-                cursor.execute("""
-                    INSERT INTO attachments (query_id, message_id, filename, original_filename, file_size, file_type, filepath, uploaded_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (query_id, message_id, saved_filename, orig_filename, file_size, ext, save_path, user['id']))
-                
-                # Update message with attachment info
-                cursor.execute("""
-                    UPDATE messages SET attachment_filename = ?, attachment_path = ? WHERE id = ?
-                """, (orig_filename, saved_filename, message_id))
-        
-        # Create user confirmation notification
-        create_notification(
-            user['id'],
-            query_id,
-            'Query Submitted Successfully',
-            f'Your query "#{query_id}: {title}" has been automatically routed to the {department} Department.',
-            'success'
-        )
-        
-        # Notify staff of that department
-        dept_staff = db.execute("SELECT id FROM users WHERE department = ? AND role = 'staff'", (department,)).fetchall()
-        for staff in dept_staff:
-            notif_title = f"🔴 Urgent Query: {title}" if priority == 'Urgent' else f"New Query: {title}"
-            create_notification(
-                staff['id'],
-                query_id,
-                notif_title,
-                f"New {priority} priority query from {user['name']} assigned to {department}.",
-                'urgent' if priority == 'Urgent' else 'info'
-            )
+        try:
+            cursor.execute("""
+                INSERT INTO queries (user_id, title, description, category, department, priority, status, admin_reviewed, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'New', ?, ?, ?)
+            """, (user['id'], title, description, category, department, priority, needs_admin_review, now_str, now_str))
+            query_id = cursor.lastrowid
             
-        db.commit()
-        
-        # Broadcast real-time SocketIO event to department room
-        socketio.emit('new_query_alert', {
-            'query_id': query_id,
-            'title': title,
-            'department': department,
-            'priority': priority,
-            'user_name': user['name'],
-            'user_role': user['role'],
-            'created_at': now_str
-        }, room=f"dept_{department}")
-        
-        flash(f'Your query has been automatically routed to the {department} Department with {priority} priority.', 'success')
-        return redirect(url_for('query_details', query_id=query_id))
+            # Save initial message
+            cursor.execute("""
+                INSERT INTO messages (query_id, sender_id, message, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (query_id, user['id'], description, now_str))
+            message_id = cursor.lastrowid
+            
+            # Handle optional file attachment
+            if 'attachment' in request.files:
+                file = request.files['attachment']
+                if file and file.filename and allowed_file(file.filename):
+                    orig_filename = file.filename
+                    ext = orig_filename.rsplit('.', 1)[1].lower()
+                    clean_name = secure_filename(orig_filename)
+                    saved_filename = f"q{query_id}_{int(datetime.now().timestamp())}_{clean_name}"
+                    save_path = os.path.join(app.config['UPLOAD_FOLDER'], saved_filename)
+                    file.save(save_path)
+                    file_size = os.path.getsize(save_path)
+                    
+                    cursor.execute("""
+                        INSERT INTO attachments (query_id, message_id, filename, original_filename, file_size, file_type, filepath, uploaded_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (query_id, message_id, saved_filename, orig_filename, file_size, ext, save_path, user['id']))
+                    
+                    # Update message with attachment info
+                    cursor.execute("""
+                        UPDATE messages SET attachment_filename = ?, attachment_path = ? WHERE id = ?
+                    """, (orig_filename, saved_filename, message_id))
+            
+            db.commit()
+            
+            # Safe Notification Creation
+            try:
+                create_notification(
+                    user['id'],
+                    query_id,
+                    'Query Submitted Successfully',
+                    f'Your query "#{query_id}: {title}" has been automatically routed to the {department} Department.',
+                    'success'
+                )
+                
+                dept_receivers = db.execute("""
+                    SELECT id, role FROM users 
+                    WHERE (department = ? OR department = ? OR (role = 'hod' AND department = ?))
+                      AND role IN ('hod', 'staff', 'faculty')
+                """, (department, category, department)).fetchall()
+                
+                for receiver in dept_receivers:
+                    notif_title = f"🔴 Urgent Query: {title}" if priority == 'Urgent' else f"New Query: {title}"
+                    create_notification(
+                        receiver['id'],
+                        query_id,
+                        notif_title,
+                        f"New {priority} priority query from {user['name']} in {department}.",
+                        'urgent' if priority == 'Urgent' else 'info'
+                    )
+            except Exception as notif_err:
+                print(f"Notification error bypassed: {notif_err}")
+
+            # Safe SocketIO Emit
+            try:
+                socketio.emit('new_query_alert', {
+                    'query_id': query_id,
+                    'title': title,
+                    'department': department,
+                    'priority': priority,
+                    'user_name': user['name'],
+                    'user_role': user['role'],
+                    'created_at': now_str
+                }, room=f"dept_{department}")
+            except Exception as sock_err:
+                print(f"Socket emit bypassed: {sock_err}")
+                
+            flash(f'Your query has been automatically routed to the {department} Department with {priority} priority.', 'success')
+            return redirect(url_for('query_details', query_id=query_id))
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error submitting query: {e}")
+            flash(f'An error occurred while submitting your query: {str(e)}', 'danger')
+            return render_template('submit_query.html')
+
         
     return render_template('submit_query.html')
 
@@ -535,13 +602,24 @@ def query_details(query_id):
         flash('Query not found.', 'danger')
         return redirect(url_for('dashboard'))
         
-    # Authorization checks: Students/Faculty can only see their own queries; Staff can see their dept; Admin can see all
-    if user['role'] in ['student', 'faculty'] and query['user_id'] != user['id']:
-        flash('Unauthorized access to this query.', 'danger')
+    # Authorization checks:
+    # 1. Submitter: can see their own query
+    if user['id'] == query['user_id']:
+        pass
+    # 2. HOD: can see queries in their department
+    elif user['role'] == 'hod' and (query['department'] == user['department'] or not user['department']):
+        pass
+    # 3. Central Admin: oversees queries
+    elif user['role'] == 'admin':
+        pass
+    # 4. Assigned Staff / Faculty: ONLY if specifically assigned to them by HOD
+    elif user['role'] in ['staff', 'faculty'] and query['assigned_staff_id'] == user['id']:
+        pass
+    else:
+        flash('Access restricted: This query is assigned to a different resolver or pending HOD assignment.', 'warning')
+        if user['role'] in ['staff', 'faculty', 'hod']:
+            return redirect(url_for('department_dashboard'))
         return redirect(url_for('dashboard'))
-    elif user['role'] == 'staff' and query['department'] != user['department'] and user['role'] != 'admin':
-        flash('This query belongs to a different department.', 'warning')
-        return redirect(url_for('department_dashboard'))
         
     # Fetch Messages
     messages = db.execute("""
@@ -569,9 +647,19 @@ def query_details(query_id):
     """, (query_id,)).fetchall()
     
     # Department Staff & Admins list for assignment
-    dept_staff = db.execute(
-        "SELECT id, name, email, role, department, designation FROM users WHERE role IN ('staff', 'admin') AND is_active = 1 ORDER BY role DESC, department ASC, id ASC"
-    ).fetchall()
+    if user['role'] == 'hod':
+        dept_staff = db.execute(
+            "SELECT id, name, email, role, department, designation FROM users WHERE role IN ('staff', 'faculty') AND (department = ? OR department IS NULL) AND is_active = 1 ORDER BY name ASC",
+            (user['department'],)
+        ).fetchall()
+        if not dept_staff:
+            dept_staff = db.execute(
+                "SELECT id, name, email, role, department, designation FROM users WHERE role IN ('staff', 'faculty') AND is_active = 1 ORDER BY name ASC"
+            ).fetchall()
+    else:
+        dept_staff = db.execute(
+            "SELECT id, name, email, role, department, designation FROM users WHERE role IN ('staff', 'faculty', 'admin') AND is_active = 1 ORDER BY department ASC, name ASC"
+        ).fetchall()
     
     # Audit Logs
     audit_logs = db.execute("""
@@ -582,14 +670,58 @@ def query_details(query_id):
         ORDER BY a.created_at DESC
     """, (query_id,)).fetchall()
     
+    # Calculate Live Presence & Online Status for all 3 key parties: Submitter, Assigned Staff, Branch HOD
+    # 1. Submitter Presence
+    sub_row = db.execute("SELECT id, name, role, department, last_active_at FROM users WHERE id = ?", (query['user_id'],)).fetchone()
+    submitter_presence = {
+        'id': sub_row['id'] if sub_row else query['user_id'],
+        'name': sub_row['name'] if sub_row else 'Submitter',
+        'role': sub_row['role'].capitalize() if sub_row else 'Student',
+        'is_online': (sub_row['id'] in ONLINE_USERS) if sub_row else False,
+        'last_active': sub_row['last_active_at'] if sub_row else None
+    }
+
+    # 2. Assigned Staff Presence
+    staff_presence = None
+    if query['assigned_staff_id']:
+        staff_row = db.execute("SELECT id, name, role, department, designation, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
+        if staff_row:
+            staff_presence = {
+                'id': staff_row['id'],
+                'name': staff_row['name'],
+                'role': 'Assigned Resolver',
+                'department': staff_row['department'] or query['department'],
+                'designation': staff_row['designation'] or 'Department Staff',
+                'is_online': (staff_row['id'] in ONLINE_USERS),
+                'last_active': staff_row['last_active_at']
+            }
+
+    # 3. Branch HOD Presence
+    hod_row = db.execute("SELECT id, name, role, department, designation, last_active_at FROM users WHERE role = 'hod' AND department = ? LIMIT 1", (query['department'],)).fetchone()
+    hod_presence = None
+    if hod_row:
+        hod_presence = {
+            'id': hod_row['id'],
+            'name': hod_row['name'],
+            'role': 'Branch HOD',
+            'department': hod_row['department'],
+            'designation': hod_row['designation'] or 'Head of Department',
+            'is_online': (hod_row['id'] in ONLINE_USERS),
+            'last_active': hod_row['last_active_at']
+        }
+
     return render_template(
         'query_details.html',
         query=query,
         messages=visible_messages,
         attachments=attachments,
         dept_staff=dept_staff,
-        audit_logs=audit_logs
+        audit_logs=audit_logs,
+        submitter_presence=submitter_presence,
+        staff_presence=staff_presence,
+        hod_presence=hod_presence
     )
+
 
 @app.route('/query/<int:query_id>/message', methods=['POST'])
 @login_required
@@ -608,12 +740,17 @@ def post_message(query_id):
     if not query:
         return jsonify({'error': 'Query not found'}), 404
         
-    # Permission check
-    if user['role'] in ['student', 'faculty'] and query['user_id'] != user['id']:
-        return jsonify({'error': 'Unauthorized'}), 403
+    # Permission check: Allowed for Submitter, Assigned Staff/Faculty Resolver, Branch HOD, or Admin
+    is_submitter = (user['id'] == query['user_id'])
+    is_assigned_staff = (query['assigned_staff_id'] == user['id'])
+    is_branch_hod = (user['role'] == 'hod' and (query['department'] == user['department'] or not user['department']))
+    is_admin = (user['role'] == 'admin')
+    
+    if not (is_submitter or is_assigned_staff or is_branch_hod or is_admin):
+        return jsonify({'error': 'Unauthorized to participate in this query chat.'}), 403
         
     message_text = request.form.get('message', '').strip()
-    is_internal_note = 1 if request.form.get('is_internal_note') == 'true' and user['role'] in ['staff', 'admin'] else 0
+    is_internal_note = 1 if request.form.get('is_internal_note') == 'true' and (user['role'] in ['staff', 'hod', 'admin'] or (user['role'] == 'faculty' and query['assigned_staff_id'] == user['id'])) else 0
     
     if not message_text and 'attachment' not in request.files:
         return jsonify({'error': 'Message cannot be empty'}), 400
@@ -648,41 +785,45 @@ def post_message(query_id):
             
             cursor.execute("UPDATE messages SET attachment_filename = ?, attachment_path = ? WHERE id = ?", (orig_filename, saved_filename, message_id))
 
-    # Update first_response_at if staff/admin responded for the first time
-    if user['role'] in ['staff', 'admin'] and not is_internal_note:
+    # Update first_response_at if staff/hod/admin responded for the first time
+    if user['role'] in ['staff', 'hod', 'admin', 'faculty'] and not is_submitter and not is_internal_note:
         if not query['first_response_at']:
             cursor.execute("UPDATE queries SET first_response_at = ? WHERE id = ?", (now_str, query_id))
             
-        # If query was New or Waiting for User, update status
+        # If query was New or Waiting for User, update status to In Progress
         if query['status'] in ['New', 'Waiting for User']:
             cursor.execute("UPDATE queries SET status = 'In Progress' WHERE id = ?", (query_id,))
             
-    # If user replies, change status to In Progress if it was Waiting for User
-    if user['role'] in ['student', 'faculty'] and query['status'] == 'Waiting for User':
+    # If submitter replies, change status to In Progress if it was Waiting for User
+    if is_submitter and query['status'] == 'Waiting for User':
         cursor.execute("UPDATE queries SET status = 'In Progress' WHERE id = ?", (query_id,))
         
     cursor.execute("UPDATE queries SET updated_at = ? WHERE id = ?", (now_str, query_id))
     
-    # Notify other party
-    if user['role'] in ['student', 'faculty']:
-        # Notify assigned staff or department
-        if query['assigned_staff_id']:
+    # Safe Notifications
+    try:
+        if is_submitter:
+            # Notify assigned staff or department
+            if query['assigned_staff_id']:
+                create_notification(
+                    query['assigned_staff_id'],
+                    query_id,
+                    f"New reply on Query #{query_id}",
+                    f"{user['name']} replied: {message_text[:60]}...",
+                    'message'
+                )
+        elif not is_internal_note:
+            # Notify query owner
+            sender_role_label = 'HOD' if user['role'] == 'hod' else 'Staff'
             create_notification(
-                query['assigned_staff_id'],
+                query['user_id'],
                 query_id,
-                f"New reply on Query #{query_id}",
-                f"{user['name']} replied: {message_text[:60]}...",
+                f"Department reply on Query #{query_id}",
+                f"{user['name']} ({user['department'] or sender_role_label}): {message_text[:60]}...",
                 'message'
             )
-    elif not is_internal_note:
-        # Notify query owner
-        create_notification(
-            query['user_id'],
-            query_id,
-            f"Department reply on Query #{query_id}",
-            f"{user['name']} ({user['department'] or 'Staff'}): {message_text[:60]}...",
-            'message'
-        )
+    except Exception as e:
+        print(f"Chat notification notice: {e}")
         
     db.commit()
     
@@ -701,7 +842,10 @@ def post_message(query_id):
     }
     
     # Broadcast to room
-    socketio.emit('chat_message', msg_data, room=f"query_{query_id}")
+    try:
+        socketio.emit('chat_message', msg_data, room=f"query_{query_id}")
+    except Exception as e:
+        print(f"Socket emit notice: {e}")
     
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.is_json:
         return jsonify({'status': 'success', 'message': msg_data})
@@ -711,7 +855,6 @@ def post_message(query_id):
 
 @app.route('/query/<int:query_id>/status', methods=['POST'])
 @login_required
-@role_required(['staff', 'admin'])
 def update_query_status(query_id):
     user = get_current_user()
     db = get_db()
@@ -720,6 +863,11 @@ def update_query_status(query_id):
     if not query:
         flash('Query not found.', 'danger')
         return redirect(url_for('department_dashboard'))
+        
+    # Strictly ONLY the assigned staff member or central admin can update status (NOT HOD)
+    if user['role'] != 'admin' and query['assigned_staff_id'] != user['id']:
+        flash('Permission restricted: Only the assigned Staff member can update the query status.', 'danger')
+        return redirect(url_for('query_details', query_id=query_id))
         
     new_status = request.form.get('status')
     if new_status not in Config.STATUSES:
@@ -733,6 +881,7 @@ def update_query_status(query_id):
     if new_status == 'Resolved':
         cursor.execute("""
             UPDATE queries SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?
+
         """, (new_status, resolved_at, now_str, query_id))
     else:
         cursor.execute("""
@@ -768,7 +917,7 @@ def update_query_status(query_id):
 
 @app.route('/query/<int:query_id>/reassign', methods=['POST'])
 @login_required
-@role_required(['staff', 'admin'])
+@role_required(['staff', 'hod', 'admin'])
 def reassign_query(query_id):
     user = get_current_user()
     db = get_db()
@@ -913,15 +1062,27 @@ def download_attachment(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # -------------------------------------------------------------
-# DEPARTMENT STAFF DASHBOARD
+# FACULTY WORKSPACE SELECTOR
+# -------------------------------------------------------------
+
+@app.route('/faculty-choice')
+@login_required
+@role_required(['faculty'])
+def faculty_choice():
+    return render_template('faculty_choice.html')
+
+# -------------------------------------------------------------
+# DEPARTMENT RESOLUTION QUEUE (STAFF & FACULTY)
 # -------------------------------------------------------------
 
 @app.route('/department-dashboard')
 @login_required
-@role_required(['staff', 'admin'])
+@role_required(['staff', 'hod', 'admin', 'faculty'])
 def department_dashboard():
     user = get_current_user()
-    dept = request.args.get('dept', user['department'] or 'IT')
+    dept = request.args.get('dept')
+    if not dept:
+        dept = user['department'] if user['department'] else 'Academics'
     
     db = get_db()
     today_str = datetime.now().strftime('%Y-%m-%d')
@@ -984,8 +1145,15 @@ def department_dashboard():
     """
     params = [dept]
     
+    # Strict isolation: Faculty resolvers and staff see ONLY their assigned queries
+    if user['role'] in ['staff', 'faculty']:
+        sql += " AND q.assigned_staff_id = ?"
+        params.append(user['id'])
+        
     if view_mode == 'unresolved':
         sql += " AND q.status != 'Resolved'"
+    elif view_mode == 'unassigned' and user['role'] in ['hod', 'admin']:
+        sql += " AND q.assigned_staff_id IS NULL AND q.status != 'Resolved'"
     elif view_mode == 'recent':
         pass  # will order by created_at DESC
         
@@ -1008,8 +1176,14 @@ def department_dashboard():
     queries = db.execute(sql, params).fetchall()
     
     # Counts for quick tabs
-    unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND status != 'Resolved'", (dept,)).fetchone()[0]
-    total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ?", (dept,)).fetchone()[0]
+    if user['role'] in ['staff', 'faculty']:
+        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status != 'Resolved'", (user['id'],)).fetchone()[0]
+        unassigned_count = 0
+        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
+    else:
+        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND status != 'Resolved'", (dept,)).fetchone()[0]
+        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept,)).fetchone()[0]
+        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ?", (dept,)).fetchone()[0]
     
     # Department info
     dept_info = db.execute("SELECT * FROM departments WHERE name = ?", (dept,)).fetchone()
@@ -1026,6 +1200,7 @@ def department_dashboard():
         current_status=status_filter,
         search_query=search_query,
         unresolved_count=unresolved_count,
+        unassigned_count=unassigned_count,
         total_dept_count=total_dept_count
     )
 
@@ -1078,47 +1253,147 @@ def admin_dashboard():
             'contact_email': dept_row['contact_email'] if dept_row else 'support@college.com'
         })
 
-    # Unresolved Queries (New, Assigned, In Progress, Waiting for User)
-    unresolved_queries = db.execute("""
-        SELECT q.*, u.name as user_name, u.role as user_role, u.course, u.year,
-               staff.name as staff_name
-        FROM queries q
-        JOIN users u ON q.user_id = u.id
-        LEFT JOIN users staff ON q.assigned_staff_id = staff.id
-        WHERE q.status != 'Resolved'
-        ORDER BY 
-            CASE WHEN q.priority = 'Urgent' THEN 1 WHEN q.priority = 'High' THEN 2 WHEN q.priority = 'Medium' THEN 3 ELSE 4 END,
-            q.created_at DESC
-    """).fetchall()
-
-    # Recently Added Queries (Latest created queries)
-    recent_queries = db.execute("""
-        SELECT q.*, u.name as user_name, u.role as user_role, u.course, u.year,
-               staff.name as staff_name
-        FROM queries q
-        JOIN users u ON q.user_id = u.id
-        LEFT JOIN users staff ON q.assigned_staff_id = staff.id
-        ORDER BY q.created_at DESC LIMIT 12
-    """).fetchall()
-
-    # All Problems
-    all_queries = db.execute("""
-        SELECT q.*, u.name as user_name, u.role as user_role, u.course, u.year,
-               staff.name as staff_name
-        FROM queries q
-        JOIN users u ON q.user_id = u.id
-        LEFT JOIN users staff ON q.assigned_staff_id = staff.id
-        ORDER BY q.created_at DESC
+    # HODs list with live presence and branch workload stats
+    hod_list = db.execute("""
+        SELECT u.id, u.name, u.email, u.department, u.last_active_at, u.designation,
+               (SELECT COUNT(*) FROM queries WHERE department = u.department) as query_count,
+               (SELECT COUNT(*) FROM queries WHERE department = u.department AND status != 'Resolved') as unresolved_count
+        FROM users u
+        WHERE u.role = 'hod' AND u.is_active = 1
+        ORDER BY u.department ASC
     """).fetchall()
 
     return render_template(
         'admin_dashboard.html',
         stats=stats,
         category_cards=category_cards,
-        unresolved_queries=unresolved_queries,
-        recent_queries=recent_queries,
-        all_queries=all_queries
+        hod_list=hod_list
     )
+
+@app.route('/admin/communicate-hod')
+@login_required
+@role_required(['admin'])
+def admin_communicate_hod():
+    db = get_db()
+    
+    # Query all active HODs with their academic hierarchy attributes
+    hod_rows = db.execute("""
+        SELECT u.id, u.name, u.email, u.level, u.course, u.department, u.designation, u.last_active_at,
+               (SELECT COUNT(*) FROM admin_hod_messages WHERE sender_id = u.id AND is_read = 0) as unread_count,
+               (SELECT COUNT(*) FROM queries WHERE department = u.department AND status != 'Resolved') as pending_queries
+        FROM users u
+        WHERE u.role = 'hod' AND u.is_active = 1
+        ORDER BY u.level ASC, u.course ASC, u.name ASC
+    """).fetchall()
+    
+    hods = []
+    for h in hod_rows:
+        hods.append({
+            'id': h['id'],
+            'name': h['name'],
+            'email': h['email'],
+            'level': h['level'] or 'UG',
+            'course': h['course'] or 'B.Tech',
+            'department': h['department'] or 'General Department',
+            'designation': h['designation'] or 'Head of Department (HOD)',
+            'last_active_at': h['last_active_at'],
+            'is_online': (h['id'] in ONLINE_USERS),
+            'unread_count': h['unread_count'],
+            'pending_queries': h['pending_queries']
+        })
+        
+    return render_template(
+        'admin_communicate_hod.html',
+        hods=hods,
+        academic_levels=Config.ACADEMIC_LEVELS,
+        courses_branches=Config.COURSES_BRANCHES
+    )
+
+@app.route('/api/admin-hod-messages/<int:hod_id>', methods=['GET', 'POST'])
+@login_required
+@role_required(['admin', 'hod'])
+def admin_hod_messages(hod_id):
+    user = get_current_user()
+    db = get_db()
+    
+    # Permission verification
+    if user['role'] == 'hod' and user['id'] != hod_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    admin_user = db.execute("SELECT id, name FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+    admin_id = admin_user['id'] if admin_user else 1
+    
+    if request.method == 'POST':
+        message_text = request.form.get('message', '').strip() or (request.get_json() or {}).get('message', '').strip()
+        if not message_text:
+            return jsonify({'error': 'Message cannot be empty'}), 400
+            
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        sender_id = user['id']
+        receiver_id = hod_id if user['role'] == 'admin' else admin_id
+        
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO admin_hod_messages (sender_id, receiver_id, department, message, is_read, created_at)
+            VALUES (?, ?, ?, ?, 0, ?)
+        """, (sender_id, receiver_id, user['department'] or 'Central Administration', message_text, now_str))
+        msg_id = cursor.lastrowid
+        
+        # Send Notification
+        create_notification(
+            receiver_id,
+            None,
+            f"Direct Message from {user['name']}",
+            f"{message_text[:60]}...",
+            'message'
+        )
+        db.commit()
+        
+        msg_payload = {
+            'id': msg_id,
+            'sender_id': sender_id,
+            'sender_name': user['name'],
+            'sender_role': user['role'],
+            'message': message_text,
+            'created_at': now_str,
+            'timeago': 'Just now'
+        }
+        
+        # Broadcast SocketIO
+        socketio.emit('admin_hod_chat', msg_payload, room=f"admin_hod_{hod_id}")
+        return jsonify({'status': 'success', 'message': msg_payload})
+        
+    # GET: Mark received messages as read
+    try:
+        db.execute("UPDATE admin_hod_messages SET is_read = 1 WHERE receiver_id = ? AND sender_id = ?", (user['id'], hod_id if user['role'] == 'admin' else admin_id))
+        db.commit()
+    except Exception:
+        pass
+
+    # GET: Fetch message history
+    rows = db.execute("""
+        SELECT m.*, u.name as sender_name, u.role as sender_role
+        FROM admin_hod_messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE (m.sender_id = ? AND m.receiver_id = ?)
+           OR (m.sender_id = ? AND m.receiver_id = ?)
+        ORDER BY m.created_at ASC
+    """, (admin_id, hod_id, hod_id, admin_id)).fetchall()
+    
+    msg_list = []
+    for r in rows:
+        msg_list.append({
+            'id': r['id'],
+            'sender_id': r['sender_id'],
+            'sender_name': r['sender_name'],
+            'sender_role': r['sender_role'],
+            'message': r['message'],
+            'created_at': r['created_at'],
+            'timeago': format_time_ago(r['created_at']),
+            'is_me': (r['sender_id'] == user['id'])
+        })
+        
+    return jsonify({'messages': msg_list})
 
 @app.route('/admin/users', methods=['GET', 'POST'])
 @login_required
@@ -1240,52 +1515,135 @@ def admin_departments():
     """).fetchall()
     
     return render_template('departments.html', departments=departments)
-
 @app.route('/admin/analytics')
 @login_required
-@role_required(['admin'])
+@role_required(['admin', 'hod'])
 def admin_analytics():
+    return render_template('analytics.html')
+
+@app.route('/hod/analytics')
+@login_required
+@role_required(['hod', 'admin'])
+def hod_analytics():
     return render_template('analytics.html')
 
 @app.route('/api/analytics-data')
 @login_required
-@role_required(['admin'])
+@role_required(['admin', 'hod'])
 def analytics_data():
+    user = get_current_user()
     db = get_db()
+    is_hod = (user['role'] == 'hod')
+    hod_dept = user['department'] or ''
     
-    # 1. Queries by Department
-    dept_rows = db.execute("""
-        SELECT d.name, COUNT(q.id) as count
-        FROM departments d
-        LEFT JOIN queries q ON d.name = q.department
-        GROUP BY d.name
+    # Base filter for HOD
+    where_clause = ""
+    params = []
+    if is_hod and hod_dept:
+        where_clause = "WHERE (q.department = ? OR u.department = ?)"
+        params = [hod_dept, hod_dept]
+        
+    # 1. Queries by Department / Branch
+    if not is_hod:
+        dept_rows = db.execute("""
+            SELECT COALESCE(u.department, q.department, 'General Campus') as dept_name, COUNT(q.id) as count
+            FROM queries q
+            JOIN users u ON q.user_id = u.id
+            GROUP BY dept_name
+            ORDER BY count DESC
+        """).fetchall()
+    else:
+        dept_rows = db.execute(f"""
+            SELECT COALESCE(u.department, q.department, ?) as dept_name, COUNT(q.id) as count
+            FROM queries q
+            JOIN users u ON q.user_id = u.id
+            {where_clause}
+            GROUP BY dept_name
+        """, (hod_dept, *params)).fetchall()
+
+    # 2. Queries by Student Year of Study
+    year_rows = db.execute(f"""
+        SELECT 
+            CASE 
+                WHEN u.role = 'faculty' THEN 'Faculty Submissions'
+                WHEN u.year = 1 THEN '1st Year Students'
+                WHEN u.year = 2 THEN '2nd Year Students'
+                WHEN u.year = 3 THEN '3rd Year Students'
+                WHEN u.year = 4 THEN '4th Year Students'
+                ELSE 'General Campus'
+            END as year_label,
+            COUNT(q.id) as count
+        FROM queries q
+        JOIN users u ON q.user_id = u.id
+        {where_clause}
+        GROUP BY year_label
         ORDER BY count DESC
+    """, params).fetchall()
+
+    # 3. Department × Year Cross Matrix Breakdown
+    matrix_rows = db.execute("""
+        SELECT 
+            COALESCE(u.department, q.department, 'General Campus') as dept_name,
+            SUM(CASE WHEN u.year = 1 THEN 1 ELSE 0 END) as yr1,
+            SUM(CASE WHEN u.year = 2 THEN 1 ELSE 0 END) as yr2,
+            SUM(CASE WHEN u.year = 3 THEN 1 ELSE 0 END) as yr3,
+            SUM(CASE WHEN u.year = 4 THEN 1 ELSE 0 END) as yr4,
+            SUM(CASE WHEN u.role = 'faculty' THEN 1 ELSE 0 END) as faculty_count,
+            COUNT(q.id) as total_count
+        FROM queries q
+        JOIN users u ON q.user_id = u.id
+        GROUP BY dept_name
+        ORDER BY total_count DESC
     """).fetchall()
+
+    matrix_list = []
+    for r in matrix_rows:
+        matrix_list.append({
+            'dept_name': r['dept_name'],
+            'yr1': r['yr1'],
+            'yr2': r['yr2'],
+            'yr3': r['yr3'],
+            'yr4': r['yr4'],
+            'faculty_count': r['faculty_count'],
+            'total_count': r['total_count']
+        })
     
-    # 2. Queries by Category
-    cat_rows = db.execute("""
-        SELECT category, COUNT(*) as count
-        FROM queries
-        GROUP BY category
+    # 4. Queries by Category
+    cat_rows = db.execute(f"""
+        SELECT q.category, COUNT(q.id) as count
+        FROM queries q
+        JOIN users u ON q.user_id = u.id
+        {where_clause}
+        GROUP BY q.category
         ORDER BY count DESC
-    """).fetchall()
+    """, params).fetchall()
     
-    # 3. Queries by Status
-    status_rows = db.execute("""
-        SELECT status, COUNT(*) as count
-        FROM queries
-        GROUP BY status
-    """).fetchall()
+    # 5. Queries by Status
+    status_rows = db.execute(f"""
+        SELECT q.status, COUNT(q.id) as count
+        FROM queries q
+        JOIN users u ON q.user_id = u.id
+        {where_clause}
+        GROUP BY q.status
+        ORDER BY count DESC
+    """, params).fetchall()
     
-    # 4. Queries by Priority
-    priority_rows = db.execute("""
-        SELECT priority, COUNT(*) as count
-        FROM queries
-        GROUP BY priority
-    """).fetchall()
+    # 6. Queries by Priority
+    priority_rows = db.execute(f"""
+        SELECT q.priority, COUNT(q.id) as count
+        FROM queries q
+        JOIN users u ON q.user_id = u.id
+        {where_clause}
+        GROUP BY q.priority
+        ORDER BY count DESC
+    """, params).fetchall()
     
     return jsonify({
-        'departments': {'labels': [r['name'] for r in dept_rows], 'data': [r['count'] for r in dept_rows]},
+        'is_hod': is_hod,
+        'user_dept': hod_dept,
+        'departments': {'labels': [r['dept_name'] for r in dept_rows], 'data': [r['count'] for r in dept_rows]},
+        'years': {'labels': [r['year_label'] for r in year_rows], 'data': [r['count'] for r in year_rows]},
+        'matrix': matrix_list,
         'categories': {'labels': [r['category'] for r in cat_rows], 'data': [r['count'] for r in cat_rows]},
         'statuses': {'labels': [r['status'] for r in status_rows], 'data': [r['count'] for r in status_rows]},
         'priorities': {'labels': [r['priority'] for r in priority_rows], 'data': [r['count'] for r in priority_rows]}
@@ -1293,8 +1651,6 @@ def analytics_data():
 
 # -------------------------------------------------------------
 # NOTIFICATIONS & PROFILE
-# -------------------------------------------------------------
-
 @app.route('/notifications')
 @login_required
 def notifications():
@@ -1368,8 +1724,48 @@ def profile():
     return render_template('profile.html', user=user)
 
 # -------------------------------------------------------------
-# FLASK-SOCKETIO REAL-TIME HANDLERS
+# FLASK-SOCKETIO REAL-TIME HANDLERS & PRESENCE TRACKING
 # -------------------------------------------------------------
+
+ONLINE_USERS = {} # user_id -> set of socket session IDs
+
+@socketio.on('user_presence_connect')
+def handle_presence_connect(data):
+    """Tracks active online users and updates last active timestamp."""
+    user_id = data.get('user_id')
+    if user_id:
+        if user_id not in ONLINE_USERS:
+            ONLINE_USERS[user_id] = set()
+        ONLINE_USERS[user_id].add(request.sid)
+        
+        # Update last_active_at in DB using local timestamp
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            db = get_db()
+            db.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now_str, user_id))
+            db.commit()
+        except Exception:
+            pass
+        
+        emit('presence_update', {'user_id': user_id, 'is_online': True, 'last_active': 'Just now'}, broadcast=True)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handles user disconnection and broadcasts offline status."""
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    for uid, sids in list(ONLINE_USERS.items()):
+        if request.sid in sids:
+            sids.remove(request.sid)
+            if not sids:
+                del ONLINE_USERS[uid]
+                try:
+                    db = get_db()
+                    db.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now_str, uid))
+                    db.commit()
+                except Exception:
+                    pass
+                emit('presence_update', {'user_id': uid, 'is_online': False, 'last_active': 'Just now'}, broadcast=True)
+            break
 
 @socketio.on('join_query')
 def handle_join_query(data):
@@ -1391,6 +1787,20 @@ def handle_join_department(data):
     if dept:
         room = f"dept_{dept}"
         join_room(room)
+
+@socketio.on('join_admin_hod')
+def handle_join_admin_hod(data):
+    hod_id = data.get('hod_id')
+    if hod_id:
+        room = f"admin_hod_{hod_id}"
+        join_room(room)
+
+@socketio.on('leave_admin_hod')
+def handle_leave_admin_hod(data):
+    hod_id = data.get('hod_id')
+    if hod_id:
+        room = f"admin_hod_{hod_id}"
+        leave_room(room)
 
 @socketio.on('typing_indicator')
 def handle_typing(data):

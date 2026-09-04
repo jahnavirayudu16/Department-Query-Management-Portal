@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Faculty Workspace Selector{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 1.5rem auto;">
+  
+  <div style="text-align: center; margin-bottom: 2.5rem;">
+    <div style="display: inline-block; font-size: 2.5rem; margin-bottom: 0.5rem;">👩‍🏫</div>
+    <h1 style="font-size: 1.85rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">
+      Welcome to Faculty Portal
+    </h1>
+    <p style="font-size: 1rem; color: #475569; max-width: 600px; margin: 0 auto; line-height: 1.5;">
+      Please select what you would like to do in this session:
+    </p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.75rem;">
+    
+    <!-- Option 1: Post a Query (Protected & Anonymous) -->
+    <div class="card" style="border-top: 5px solid #4f46e5; padding: 2rem; background: #ffffff; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md); transition: transform 0.25s ease;">
+      <div>
+        <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">✍️</div>
+        <div style="display: inline-block; background: #ede9fe; color: #5b21b6; font-size: 0.75rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; margin-bottom: 0.5rem; text-transform: uppercase;">
+          🔒 Protected Submitter Mode
+        </div>
+        <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">
+          Post / View My Queries
+        </h2>
+        <p style="font-size: 0.9rem; color: #475569; line-height: 1.55; margin-bottom: 1.5rem;">
+          Submit your own personal concerns regarding timetable, lab equipment, administrative certificates, or campus support. <strong>Your identity remains 100% anonymous & protected.</strong>
+        </p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <a href="{{ url_for('submit_query') }}" class="btn btn-primary btn-lg" style="width: 100%; text-align: center; justify-content: center; font-weight: 700;">
+          ✍️ Post a Personal Query →
+        </a>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm" style="width: 100%; text-align: center; justify-content: center; font-weight: 600;">
+          📊 View My Filed Queries
+        </a>
+      </div>
+    </div>
+
+    <!-- Option 2: Department Desk (Solve & Resolve Queries) -->
+    <div class="card" style="border-top: 5px solid #10b981; padding: 2rem; background: #ffffff; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md); transition: transform 0.25s ease;">
+      <div>
+        <div style="font-size: 2.2rem; margin-bottom: 0.75rem;">🛠️</div>
+        <div style="display: inline-block; background: #d1fae5; color: #065f46; font-size: 0.75rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; margin-bottom: 0.5rem; text-transform: uppercase;">
+          👨‍💼 Resolver / Staff Desk
+        </div>
+        <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">
+          Solve Department Queries
+        </h2>
+        <p style="font-size: 0.9rem; color: #475569; line-height: 1.55; margin-bottom: 1.5rem;">
+          Access the active queue for your department/wing. Review student problems, communicate via real-time 2-way chat, and update resolution statuses.
+        </p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <a href="{{ url_for('department_dashboard') }}" class="btn btn-success btn-lg" style="width: 100%; text-align: center; justify-content: center; font-weight: 700;">
+          📥 Open Department Desk →
+        </a>
+        <span style="font-size: 0.78rem; color: var(--text-muted); text-align: center;">
+          ⚡ You can switch between these modes anytime from the sidebar menu.
+        </span>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

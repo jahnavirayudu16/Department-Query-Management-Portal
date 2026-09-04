@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT DEFAULT 'Anonymous User',
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('student', 'faculty', 'staff', 'admin')),
+    role TEXT NOT NULL DEFAULT 'student',
+    level TEXT,
     department TEXT,
     course TEXT,
     year INTEGER,
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
     roll_no TEXT,
     designation TEXT,
     is_active INTEGER DEFAULT 1,
+    last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -35,10 +37,10 @@ CREATE TABLE IF NOT EXISTS queries (
     user_id INTEGER NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
-    category TEXT NOT NULL CHECK(category IN ('Academics', 'Administrative', 'Others')),
+    category TEXT NOT NULL DEFAULT 'Academics',
     department TEXT NOT NULL,
-    priority TEXT NOT NULL CHECK(priority IN ('Low', 'Medium', 'High', 'Urgent')),
-    status TEXT NOT NULL DEFAULT 'New' CHECK(status IN ('New', 'Assigned', 'In Progress', 'Waiting for User', 'Resolved')),
+    priority TEXT NOT NULL DEFAULT 'Medium',
+    status TEXT NOT NULL DEFAULT 'New',
     assigned_staff_id INTEGER,
     is_routed_manually INTEGER DEFAULT 0,
     admin_reviewed INTEGER DEFAULT 0,
@@ -114,6 +116,18 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS admin_hod_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL,
+    receiver_id INTEGER NOT NULL,
+    department TEXT,
+    message TEXT NOT NULL,
+    is_read INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(receiver_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_queries_user_id ON queries(user_id);
 CREATE INDEX IF NOT EXISTS idx_queries_department ON queries(department);
@@ -122,6 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_queries_status ON queries(status);
 CREATE INDEX IF NOT EXISTS idx_queries_priority ON queries(priority);
 CREATE INDEX IF NOT EXISTS idx_messages_query_id ON messages(query_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_hod_sender ON admin_hod_messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_admin_hod_receiver ON admin_hod_messages(receiver_id);
 """
 
 def check_and_migrate_db(db_conn):
@@ -130,12 +146,22 @@ def check_and_migrate_db(db_conn):
         cursor = db_conn.cursor()
         cursor.execute("PRAGMA table_info(users)")
         columns = [row[1] for row in cursor.fetchall()]
+        if 'level' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN level TEXT")
         if 'course' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN course TEXT")
         if 'year' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN year INTEGER")
         if 'is_active' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+        if 'last_active_at' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            
+        cursor.execute("PRAGMA table_info(admin_hod_messages)")
+        msg_cols = [row[1] for row in cursor.fetchall()]
+        if 'is_read' not in msg_cols:
+            cursor.execute("ALTER TABLE admin_hod_messages ADD COLUMN is_read INTEGER DEFAULT 0")
+            
         db_conn.commit()
     except Exception as e:
         print(f"Migration notice: {e}")

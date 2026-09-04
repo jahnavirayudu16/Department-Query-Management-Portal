@@ -1168,7 +1168,7 @@ textarea.form-control {
   border-color: #cbd5e1;
 }
 
-/* Responsive adjustments */
+/* Responsive adjustments & Mobile First Layout */
 @media (max-width: 900px) {
   .sidebar {
     position: fixed;
@@ -1188,6 +1188,157 @@ textarea.form-control {
     transform: translateX(-100%);
   }
 
-  .page-body { padding: 1rem; }
-  .topbar { padding: 0.75rem 1rem; }
+  .page-body { padding: 0.85rem; }
+  .topbar { padding: 0.65rem 0.85rem; }
+}
+
+/* Mobile Screen Specific Optimizations (< 768px & < 480px) */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+  
+  .hero-card {
+    padding: 1.25rem !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .hero-card h1 {
+    font-size: 1.4rem !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+    margin-bottom: 1.25rem !important;
+  }
+
+  .stat-card {
+    padding: 0.85rem !important;
+  }
+
+  .stat-card .stat-icon {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 1.1rem !important;
+  }
+
+  .stat-info h3 {
+    font-size: 1.25rem !important;
+  }
+
+  .table-container {
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-container {
+    height: 520px !important;
+  }
+
+  .chat-input-area {
+    padding: 0.6rem !important;
+  }
+
+  .chat-input-area input {
+    font-size: 0.95rem !important;
+    padding: 0.65rem 0.75rem !important;
+  }
+
+  .btn {
+    min-height: 42px; /* Touch-friendly tap target */
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .topbar-title {
+    font-size: 1rem !important;
+  }
+
+  .notif-dropdown {
+    width: 290px !important;
+    right: -60px !important;
+  }
+}
+
+/* Presence Dot Indicator */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.status-dot.online {
+  background-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.25);
+}
+
+.status-dot.online::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background-color: rgba(22, 163, 74, 0.4);
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.status-dot.offline {
+  background-color: #94a3b8;
+}
+
+/* Push Notification Permission Toast Banner */
+.push-notif-banner {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  animation: slideDown 0.4s ease-out;
+}
+
+.push-notif-content {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 1;
+  min-width: 260px;
+}
+
+.push-notif-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

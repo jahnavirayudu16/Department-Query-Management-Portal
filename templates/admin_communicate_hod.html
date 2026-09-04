@@ -1,0 +1,672 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Communicate with Head of Department (HOD){% endblock %}
+
+{% block content %}
+<div style="max-width: 1300px; margin: 0 auto;" id="adminHodDesk">
+
+  <!-- Header Banner -->
+  <div class="hero-card" style="padding: 1.5rem 2rem; margin-bottom: 1.5rem; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <div style="display: inline-block; background: rgba(255,255,255,0.18); color: #ffffff; font-size: 0.75rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; margin-bottom: 0.35rem; text-transform: uppercase;">
+          ⚡ Central Administration Direct Line
+        </div>
+        <h1 style="font-size: 1.7rem; font-weight: 800; color: #ffffff; margin: 0 0 0.25rem 0;">
+          💬 Communicate with Head of Department (HOD)
+        </h1>
+        <p style="font-size: 0.88rem; color: #c7d2fe; margin: 0;">
+          Select Academic Level (UG/PG/Diploma), Degree Program, and Branch to chat directly with Department Heads in real-time.
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); font-weight: 700;">
+          ⚡ Admin Cockpit
+        </a>
+        <a href="{{ url_for('admin_analytics') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); font-weight: 700;">
+          📊 Campus Analytics
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main 2-Column Split Workspace -->
+  <div style="display: grid; grid-template-columns: 380px 1fr; gap: 1.5rem; align-items: start;">
+    
+    <!-- LEFT PANEL: Filter Cascade & HOD Directory -->
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+      
+      <!-- Academic Cascade Filter Box -->
+      <div class="card" style="padding: 1.25rem;">
+        <h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;">
+          🔍 Filter by Academic Program
+        </h3>
+
+        <!-- 1. Level Filter Tabs (All / UG / PG / Diploma) -->
+        <div style="margin-bottom: 0.85rem;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 0.35rem;">
+            1. Academic Level
+          </label>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem;">
+            <button type="button" class="btn btn-sm level-tab active" data-level="ALL" onclick="filterByLevel('ALL', this)" style="padding: 0.35rem 0.2rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px;">
+              All
+            </button>
+            <button type="button" class="btn btn-sm level-tab" data-level="UG" onclick="filterByLevel('UG', this)" style="padding: 0.35rem 0.2rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px;">
+              🎓 UG
+            </button>
+            <button type="button" class="btn btn-sm level-tab" data-level="PG" onclick="filterByLevel('PG', this)" style="padding: 0.35rem 0.2rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px;">
+              🔬 PG
+            </button>
+            <button type="button" class="btn btn-sm level-tab" data-level="Diploma" onclick="filterByLevel('Diploma', this)" style="padding: 0.35rem 0.2rem; font-size: 0.78rem; font-weight: 700; border-radius: 6px;">
+              📜 Dip
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Program / Course Dropdown -->
+        <div style="margin-bottom: 0.85rem;">
+          <label for="programFilterSelect" style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 0.35rem;">
+            2. Degree Program / Course
+          </label>
+          <select id="programFilterSelect" class="form-control" style="font-size: 0.85rem; padding: 0.5rem;" onchange="onProgramFilterChange()">
+            <option value="ALL">-- All Degree Programs --</option>
+            <!-- Populated dynamically based on level -->
+          </select>
+        </div>
+
+        <!-- 3. Branch / Department Dropdown -->
+        <div style="margin-bottom: 0.85rem;">
+          <label for="branchFilterSelect" style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 0.35rem;">
+            3. Branch / Department Specialization
+          </label>
+          <select id="branchFilterSelect" class="form-control" style="font-size: 0.85rem; padding: 0.5rem;" onchange="onBranchFilterChange()">
+            <option value="ALL">-- All Branches / Departments --</option>
+            <!-- Populated dynamically based on program -->
+          </select>
+        </div>
+
+        <!-- Search input -->
+        <div>
+          <input type="text" id="hodSearchInput" class="form-control" placeholder="🔍 Search HOD name or email..." oninput="onSearchFilterChange()" style="font-size: 0.82rem; padding: 0.5rem;">
+        </div>
+      </div>
+
+      <!-- HOD List Cards Container -->
+      <div class="card" style="padding: 0.75rem; max-height: 520px; overflow-y: auto;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; padding: 0.25rem 0.5rem 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+          <span>Active Department HODs</span>
+          <span id="hodCountBadge" class="badge badge-primary" style="font-size: 0.7rem;">{{ hods | length }}</span>
+        </div>
+
+        <div id="hodCardsList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+          {% for h in hods %}
+          <div class="hod-card-item" 
+               data-id="{{ h.id }}" 
+               data-name="{{ h.name }}" 
+               data-email="{{ h.email }}" 
+               data-level="{{ h.level }}" 
+               data-course="{{ h.course }}" 
+               data-dept="{{ h.department }}" 
+               data-desig="{{ h.designation }}"
+               data-online="{{ 'true' if h.is_online else 'false' }}"
+               data-lastactive="{{ h.last_active_at | timeago if h.last_active_at else 'Recently' }}"
+               onclick="selectHod({{ h.id }})"
+               style="padding: 0.75rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem;">
+            
+            <div style="position: relative; flex-shrink: 0;">
+              <div style="width: 40px; height: 40px; border-radius: 50%; background: #4f46e5; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.95rem;">
+                {{ h.name[:1] }}
+              </div>
+              <span class="user-presence-dot" data-user-id="{{ h.id }}" style="position: absolute; bottom: 0; right: 0; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: {% if h.is_online %}#16a34a{% else %}#94a3b8{% endif %};"></span>
+            </div>
+
+            <div style="flex-grow: 1; overflow: hidden;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                <strong style="font-size: 0.88rem; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
+                  {{ h.name }}
+                </strong>
+                {% if h.pending_queries > 0 %}
+                <span class="badge badge-urgent" style="font-size: 0.65rem; padding: 1px 5px;" title="{{ h.pending_queries }} unresolved queries in branch">
+                  {{ h.pending_queries }} Qs
+                </span>
+                {% endif %}
+              </div>
+
+              <div style="font-size: 0.74rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px;">
+                🏢 {{ h.department }}
+              </div>
+
+              <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+                <span class="badge badge-sm badge-low" style="font-size: 0.65rem; padding: 1px 5px;">
+                  {{ h.level }} • {{ h.course }}
+                </span>
+                <span class="user-presence-text" data-user-id="{{ h.id }}" style="font-size: 0.68rem; font-weight: 600; color: {% if h.is_online %}#16a34a{% else %}#64748b{% endif %};">
+                  {% if h.is_online %}🟢 Online{% else %}⚪ {{ h.last_active_at | timeago if h.last_active_at else 'Offline' }}{% endif %}
+                </span>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div id="noHodMatchMessage" style="display: none; padding: 2rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+          <div style="font-size: 1.8rem; margin-bottom: 0.35rem;">🔍</div>
+          <strong>No matching HOD found</strong>
+          <p style="font-size: 0.78rem; margin: 4px 0 0;">Try selecting a different level or program from the filters above.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT PANEL: Live Real-Time 2-Way Chat Desk -->
+    <div class="card" style="padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 750px; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: var(--shadow-md);">
+      
+      <!-- Chat Header -->
+      <div id="activeHodHeader" style="padding: 1rem 1.25rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.85rem;">
+          <div style="position: relative;">
+            <div id="activeHodAvatar" style="width: 44px; height: 44px; border-radius: 50%; background: #4338ca; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem;">
+              🎓
+            </div>
+            <span id="activeHodPresenceDot" class="user-presence-dot" style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; background: #94a3b8;"></span>
+          </div>
+
+          <div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <h2 id="activeHodName" style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0;">
+                Select an HOD to Start Chat
+              </h2>
+              <span id="activeHodLevelBadge" class="badge badge-sm badge-primary" style="display: none;">UG</span>
+            </div>
+            <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <span id="activeHodDeptText">🏢 Department Specialization</span>
+              <span id="activeHodStatusText" style="font-weight: 600; color: #64748b;">⚪ Offline</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.4rem; align-items: center;">
+          <span class="badge badge-status-assigned" style="font-size: 0.75rem; padding: 4px 8px;">
+            🔒 End-to-End Direct Channel
+          </span>
+        </div>
+      </div>
+
+      <!-- Quick Preset Broadcast Notices Bar -->
+      <div style="padding: 0.6rem 1rem; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; display: flex; gap: 0.5rem; align-items: center; overflow-x: auto; white-space: nowrap;">
+        <span style="font-size: 0.72rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">
+          ⚡ Presets:
+        </span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="applyPresetMessage('Urgent: Please review and assign pending queries in your department queue immediately.')" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 20px;">
+          🚨 Urgent Escalation
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="applyPresetMessage('Please submit this week\'s query resolution and SLA compliance report.')" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 20px;">
+          📊 Status Report Request
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="applyPresetMessage('Reminder: Central Administration HOD Coordination Meeting scheduled for tomorrow at 3:00 PM.')" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 20px;">
+          👥 HOD Meeting Notice
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="applyPresetMessage('A high priority student concern has been re-routed to your department. Please follow up.')" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 20px;">
+          🔄 Re-routed Query Alert
+        </button>
+      </div>
+
+      <!-- Messages Stream Area -->
+      <div id="hodChatStream" style="flex: 1; padding: 1.25rem; overflow-y: auto; background: #f8fafc; display: flex; flex-direction: column; gap: 0.85rem;">
+        <div id="chatPlaceholderMessage" style="margin: auto; text-align: center; color: var(--text-muted); padding: 3rem 1rem;">
+          <div style="font-size: 3rem; margin-bottom: 0.75rem;">💬</div>
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin-bottom: 0.35rem;">
+            Central Admin Direct HOD Desk
+          </h3>
+          <p style="font-size: 0.85rem; max-width: 420px; margin: 0 auto; color: #64748b;">
+            Select any Head of Department from the left list to load conversation history and communicate live.
+          </p>
+        </div>
+      </div>
+
+      <!-- Typing indicator status -->
+      <div id="hodTypingStatus" style="padding: 0 1.25rem 0.25rem; font-size: 0.75rem; color: #4338ca; font-style: italic; font-weight: 600; display: none; background: #f8fafc;"></div>
+
+      <!-- Message Input Bar -->
+      <form id="adminHodChatForm" onsubmit="sendAdminHodMessage(event)" style="padding: 0.85rem 1.25rem; background: #ffffff; border-top: 1px solid #e2e8f0; display: flex; gap: 0.6rem; align-items: center;">
+        <input type="text" id="adminHodInput" class="form-control" placeholder="Type a message or instruction to HOD..." required style="flex: 1; font-size: 0.9rem;" autocomplete="off">
+        
+        <button type="submit" id="btnSendHodMsg" class="btn btn-primary" style="font-weight: 800; padding: 0.65rem 1.5rem; display: flex; align-items: center; gap: 0.4rem;">
+          <span>Send</span> 🚀
+        </button>
+      </form>
+
+    </div>
+
+  </div>
+
+</div>
+
+<style>
+.level-tab {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.level-tab.active {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  border-color: #4f46e5 !important;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.25);
+}
+.hod-card-item:hover {
+  border-color: #818cf8 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);
+}
+.hod-card-item.selected {
+  border-color: #4f46e5 !important;
+  background: #eef2ff !important;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+.admin-msg-bubble {
+  max-width: 78%;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+</style>
+
+<script>
+// Academic Hierarchy Structure from Config
+const academicHierarchy = {
+  'UG': {
+    programs: ['B.Tech', 'Degree', 'B.Pharmacy'],
+    details: {
+      'B.Tech': ['Computer Science & Engineering (CSE)', 'Information Technology (IT)', 'Artificial Intelligence & Data Science (AIDS)', 'Artificial Intelligence & Machine Learning (AIML)', 'Electronics & Communication Engineering (ECE)', 'Civil Engineering (Civil)', 'Electrical & Electronics Engineering (EEE)', 'Mechanical Engineering (Mech)', 'Chemical Engineering'],
+      'Degree': ['Bachelor of Computer Applications (BCA)', 'B.Sc (Computer Science)', 'B.Sc (Data Science)', 'B.Com (Computer Applications)', 'Bachelor of Business Administration (BBA)'],
+      'B.Pharmacy': ['Bachelor of Pharmacy (B.Pharm - Core)', 'Pharmaceutical Chemistry', 'Pharmacology & Toxicology']
+    }
+  },
+  'PG': {
+    programs: ['M.Tech', 'MCA', 'MBA', 'M.Sc', 'M.Pharmacy'],
+    details: {
+      'M.Tech': ['M.Tech (Computer Science & Engineering)', 'M.Tech (VLSI & Embedded Systems)', 'M.Tech (Data Science & AI)', 'M.Tech (CAD / CAM Robotics)'],
+      'MCA': ['Master of Computer Applications (MCA - Regular)', 'MCA (Data Analytics & Cloud Systems)', 'MCA (Artificial Intelligence)'],
+      'MBA': ['MBA (Business Analytics)', 'MBA (Finance Management)', 'MBA (Marketing Management)', 'MBA (Human Resource Management - HR)'],
+      'M.Sc': ['M.Sc (Computer Science)', 'M.Sc (Data Science & Analytics)'],
+      'M.Pharmacy': ['M.Pharm (Pharmaceutics)', 'M.Pharm (Pharmacology)']
+    }
+  },
+  'Diploma': {
+    programs: ['Diploma (Polytechnic)', 'D.Pharmacy'],
+    details: {
+      'Diploma (Polytechnic)': ['Diploma in Computer Engineering (DCME)', 'Diploma in Electronics & Communication (DECE)', 'Diploma in Electrical & Electronics (DEEE)', 'Diploma in Mechanical Engineering (DME)', 'Diploma in Civil Engineering (DCE)'],
+      'D.Pharmacy': ['Diploma in Pharmacy (D.Pharm - 2 Year Core)']
+    }
+  }
+};
+
+let currentSelectedHodId = null;
+let currentLevelFilter = 'ALL';
+let currentProgramFilter = 'ALL';
+let currentBranchFilter = 'ALL';
+let adminHodSocket = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  initSocketConnection();
+  populateProgramDropdown();
+
+  // Auto-select first HOD if available
+  const firstCard = document.querySelector('.hod-card-item');
+  if (firstCard) {
+    const firstId = parseInt(firstCard.dataset.id);
+    selectHod(firstId);
+  }
+});
+
+/* Socket.IO Connection & Real-Time Presence */
+function initSocketConnection() {
+  if (typeof io === 'undefined') return;
+
+  adminHodSocket = io();
+
+  // Listen for incoming messages on active room
+  adminHodSocket.on('admin_hod_chat', (msg) => {
+    if (msg.sender_id === currentSelectedHodId || (msg.is_me && currentSelectedHodId)) {
+      appendChatMessage(msg);
+    }
+  });
+
+  // Listen for live presence updates
+  adminHodSocket.on('presence_update', (data) => {
+    if (!data || !data.user_id) return;
+    
+    // Update HOD cards presence
+    const dots = document.querySelectorAll(`.user-presence-dot[data-user-id="${data.user_id}"]`);
+    dots.forEach(d => {
+      d.style.background = data.is_online ? '#16a34a' : '#94a3b8';
+    });
+
+    const textEls = document.querySelectorAll(`.user-presence-text[data-user-id="${data.user_id}"]`);
+    textEls.forEach(t => {
+      t.textContent = data.is_online ? '🟢 Online' : '⚪ Offline';
+      t.style.color = data.is_online ? '#16a34a' : '#64748b';
+    });
+
+    // If currently selected HOD, update header
+    if (currentSelectedHodId === data.user_id) {
+      const activeDot = document.getElementById('activeHodPresenceDot');
+      const activeText = document.getElementById('activeHodStatusText');
+      if (activeDot) activeDot.style.background = data.is_online ? '#16a34a' : '#94a3b8';
+      if (activeText) {
+        activeText.textContent = data.is_online ? '🟢 Online Now' : '⚪ Offline';
+        activeText.style.color = data.is_online ? '#16a34a' : '#64748b';
+      }
+    }
+  });
+}
+
+/* 1. Level Filter */
+function filterByLevel(level, btnElement) {
+  currentLevelFilter = level;
+  currentProgramFilter = 'ALL';
+  currentBranchFilter = 'ALL';
+
+  document.querySelectorAll('.level-tab').forEach(b => b.classList.remove('active'));
+  if (btnElement) btnElement.classList.add('active');
+
+  populateProgramDropdown();
+  populateBranchDropdown();
+  applyHodCardFilters();
+}
+
+/* 2. Program Dropdown Population */
+function populateProgramDropdown() {
+  const progSelect = document.getElementById('programFilterSelect');
+  progSelect.innerHTML = '<option value="ALL">-- All Degree Programs --</option>';
+
+  let programs = [];
+  if (currentLevelFilter === 'ALL') {
+    Object.keys(academicHierarchy).forEach(lvl => {
+      programs.push(...academicHierarchy[lvl].programs);
+    });
+  } else if (academicHierarchy[currentLevelFilter]) {
+    programs = academicHierarchy[currentLevelFilter].programs;
+  }
+
+  // Remove duplicates
+  programs = [...new Set(programs)];
+
+  programs.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    progSelect.appendChild(opt);
+  });
+
+  populateBranchDropdown();
+}
+
+/* 3. Program Change Handler */
+function onProgramFilterChange() {
+  const progSelect = document.getElementById('programFilterSelect');
+  currentProgramFilter = progSelect.value;
+  currentBranchFilter = 'ALL';
+
+  populateBranchDropdown();
+  applyHodCardFilters();
+}
+
+/* 4. Branch Dropdown Population */
+function populateBranchDropdown() {
+  const branchSelect = document.getElementById('branchFilterSelect');
+  branchSelect.innerHTML = '<option value="ALL">-- All Branches / Departments --</option>';
+
+  let branches = [];
+
+  if (currentProgramFilter !== 'ALL') {
+    // Find branches under this specific program
+    Object.keys(academicHierarchy).forEach(lvl => {
+      if (academicHierarchy[lvl].details[currentProgramFilter]) {
+        branches.push(...academicHierarchy[lvl].details[currentProgramFilter]);
+      }
+    });
+  } else if (currentLevelFilter !== 'ALL' && academicHierarchy[currentLevelFilter]) {
+    academicHierarchy[currentLevelFilter].programs.forEach(p => {
+      if (academicHierarchy[currentLevelFilter].details[p]) {
+        branches.push(...academicHierarchy[currentLevelFilter].details[p]);
+      }
+    });
+  } else {
+    // All branches
+    Object.keys(academicHierarchy).forEach(lvl => {
+      Object.keys(academicHierarchy[lvl].details).forEach(p => {
+        branches.push(...academicHierarchy[lvl].details[p]);
+      });
+    });
+  }
+
+  branches = [...new Set(branches)];
+
+  branches.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b;
+    opt.textContent = b;
+    branchSelect.appendChild(opt);
+  });
+}
+
+function onBranchFilterChange() {
+  const branchSelect = document.getElementById('branchFilterSelect');
+  currentBranchFilter = branchSelect.value;
+  applyHodCardFilters();
+}
+
+function onSearchFilterChange() {
+  applyHodCardFilters();
+}
+
+/* Filter HOD Cards by Level, Program, Branch, Search */
+function applyHodCardFilters() {
+  const searchTerm = (document.getElementById('hodSearchInput').value || '').toLowerCase().trim();
+  const cards = document.querySelectorAll('.hod-card-item');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const cLevel = card.dataset.level || '';
+    const cCourse = card.dataset.course || '';
+    const cDept = card.dataset.dept || '';
+    const cName = (card.dataset.name || '').toLowerCase();
+    const cEmail = (card.dataset.email || '').toLowerCase();
+
+    let match = true;
+
+    if (currentLevelFilter !== 'ALL' && cLevel !== currentLevelFilter) match = false;
+    if (currentProgramFilter !== 'ALL' && cCourse !== currentProgramFilter) match = false;
+    if (currentBranchFilter !== 'ALL' && cDept !== currentBranchFilter) match = false;
+
+    if (searchTerm) {
+      if (!cName.includes(searchTerm) && !cEmail.includes(searchTerm) && !cDept.toLowerCase().includes(searchTerm)) {
+        match = false;
+      }
+    }
+
+    if (match) {
+      card.style.display = 'flex';
+      visibleCount++;
+    } else {
+      card.style.display = 'none';
+    }
+  });
+
+  const badge = document.getElementById('hodCountBadge');
+  if (badge) badge.textContent = visibleCount;
+
+  const noMsg = document.getElementById('noHodMatchMessage');
+  if (noMsg) noMsg.style.display = visibleCount === 0 ? 'block' : 'none';
+}
+
+/* Select HOD to Chat */
+function selectHod(hodId) {
+  const card = document.querySelector(`.hod-card-item[data-id="${hodId}"]`);
+  if (!card) return;
+
+  // Leave previous room if any
+  if (adminHodSocket && currentSelectedHodId) {
+    adminHodSocket.emit('leave_admin_hod', { hod_id: currentSelectedHodId });
+  }
+
+  currentSelectedHodId = hodId;
+
+  // Highlight selected card
+  document.querySelectorAll('.hod-card-item').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+
+  // Update Header
+  const name = card.dataset.name;
+  const dept = card.dataset.dept;
+  const level = card.dataset.level;
+  const course = card.dataset.course;
+  const isOnline = card.dataset.online === 'true';
+  const lastActive = card.dataset.lastactive;
+
+  document.getElementById('activeHodAvatar').textContent = name ? name[0] : '🎓';
+  document.getElementById('activeHodName').textContent = name;
+  
+  const levelBadge = document.getElementById('activeHodLevelBadge');
+  levelBadge.style.display = 'inline-block';
+  levelBadge.textContent = `${level} • ${course}`;
+
+  document.getElementById('activeHodDeptText').textContent = `🏢 ${dept}`;
+  
+  const statusText = document.getElementById('activeHodStatusText');
+  statusText.textContent = isOnline ? '🟢 Online Now' : `⚪ Last active ${lastActive}`;
+  statusText.style.color = isOnline ? '#16a34a' : '#64748b';
+
+  const dot = document.getElementById('activeHodPresenceDot');
+  dot.style.background = isOnline ? '#16a34a' : '#94a3b8';
+
+  // Join Room
+  if (adminHodSocket) {
+    adminHodSocket.emit('join_admin_hod', { hod_id: hodId });
+  }
+
+  // Load History
+  loadChatHistory(hodId);
+}
+
+/* Load History from API */
+function loadChatHistory(hodId) {
+  const stream = document.getElementById('hodChatStream');
+  stream.innerHTML = '<div style="margin: auto; text-align: center; color: var(--text-muted);">⏳ Loading message history...</div>';
+
+  fetch(`/api/admin-hod-messages/${hodId}`)
+    .then(res => res.json())
+    .then(data => {
+      renderChatMessages(data.messages || []);
+    })
+    .catch(err => {
+      stream.innerHTML = '<div style="margin: auto; text-align: center; color: #ef4444;">Failed to load conversation history.</div>';
+    });
+}
+
+function renderChatMessages(messages) {
+  const stream = document.getElementById('hodChatStream');
+  if (!messages || messages.length === 0) {
+    stream.innerHTML = `
+      <div style="margin: auto; text-align: center; color: var(--text-muted); padding: 3rem 1rem;">
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">✨</div>
+        <strong style="font-size: 1rem; color: #0f172a; display: block;">No message history yet</strong>
+        <p style="font-size: 0.82rem; color: #64748b; margin-top: 4px;">Send a message or preset notice to begin communicating.</p>
+      </div>
+    `;
+    return;
+  }
+
+  stream.innerHTML = '';
+  messages.forEach(m => appendChatMessage(m, false));
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function appendChatMessage(msg, scroll = true) {
+  const stream = document.getElementById('hodChatStream');
+  
+  // Clear placeholder if present
+  if (stream.children.length === 1 && (stream.children[0].textContent.includes('No message history') || stream.children[0].textContent.includes('Central Admin Direct HOD Desk'))) {
+    stream.innerHTML = '';
+  }
+
+  const isMe = msg.is_me !== undefined ? msg.is_me : (msg.sender_role === 'admin');
+  const msgEl = document.createElement('div');
+  msgEl.style.display = 'flex';
+  msgEl.style.flexDirection = 'column';
+  msgEl.style.alignItems = isMe ? 'flex-end' : 'flex-start';
+  msgEl.style.marginBottom = '0.5rem';
+
+  msgEl.innerHTML = `
+    <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 2px;">
+      ${isMe ? 'You (Central Admin)' : (msg.sender_name || 'HOD')}
+    </div>
+    <div class="admin-msg-bubble" style="${isMe ? 'background: linear-gradient(135deg, #4338ca, #4f46e5); color: #ffffff; border-bottom-right-radius: 2px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);' : 'background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'}">
+      ${escapeHtml(msg.message)}
+    </div>
+    <div style="font-size: 0.68rem; color: #94a3b8; margin-top: 2px;">
+      ${msg.timeago || 'Just now'}
+    </div>
+  `;
+
+  stream.appendChild(msgEl);
+  if (scroll) {
+    stream.scrollTop = stream.scrollHeight;
+  }
+}
+
+/* Send Message Form Handler */
+function sendAdminHodMessage(e) {
+  e.preventDefault();
+  if (!currentSelectedHodId) {
+    alert('Please select an HOD from the list first.');
+    return;
+  }
+
+  const input = document.getElementById('adminHodInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+
+  fetch(`/api/admin-hod-messages/${currentSelectedHodId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === 'success') {
+      appendChatMessage({
+        message: text,
+        sender_role: 'admin',
+        is_me: true,
+        timeago: 'Just now'
+      });
+    }
+  })
+  .catch(err => {
+    alert('Failed to send message.');
+  });
+}
+
+function applyPresetMessage(text) {
+  const input = document.getElementById('adminHodInput');
+  if (input) {
+    input.value = text;
+    input.focus();
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+</script>
+{% endblock %}

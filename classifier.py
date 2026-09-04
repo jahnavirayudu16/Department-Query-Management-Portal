@@ -81,33 +81,48 @@ CATEGORY_KEYWORDS = {
 
 # Priority detection rules & tokens
 URGENT_PATTERNS = [
-    r'\burgent\b', r'\bemergency\b', r'\bcritical\b', r'\bimmediately\b',
-    r'\bstarts in one hour\b', r'\bstarts in 1 hour\b', r'\bin 1 hour\b',
-    r'\btoday itself\b', r'\bright now\b', r'\blife threatening\b',
-    r'\bfire\b', r'\belectric shock\b', r'\bshort circuit\b', r'\bflooding\b',
-    r'\blockout\b', r'\bdeadline today\b'
+    # Ragging, Harassment, Safety & Life Emergencies
+    r'\bragging\b', r'\bragged\b', r'\brag\b', r'\bharassment\b', r'\bharassed\b',
+    r'\bbullying\b', r'\bbullied\b', r'\bthreatened\b', r'\babuse\b', r'\banti-ragging\b',
+    r'\banti ragging\b', r'\bmental distress\b', r'\bpanic\b', r'\bemergency\b',
+    r'\blife threatening\b', r'\bmedical emergency\b', r'\bfire\b', r'\belectric shock\b',
+    r'\bshort circuit\b', r'\bgas leak\b', r'\bflooding\b', r'\blockout\b',
+    
+    # Critical Time-Sensitive Exam & Hall Ticket Blocks
+    r'\bhall ticket not downloading\b', r'\bhall ticket error\b', r'\bcannot download hall ticket\b',
+    r'\bhall ticket missing\b', r'\bexam today\b', r'\bexam starts in\b', r'\bstarts in 1 hour\b',
+    r'\bin 1 hour\b', r'\bstarts in one hour\b', r'\btoday itself\b', r'\bright now\b',
+    r'\bdeadline today\b', r'\blast day today\b', r'\bexam center entry\b', r'\burgent\b', r'\bcritical\b', r'\bimmediately\b'
 ]
 
 HIGH_PRIORITY_PATTERNS = [
-    r'\bexam tomorrow\b', r'\bexam is tomorrow\b', r'\bhall ticket\b',
-    r'\bnot working\b', r'\bportal is down\b', r'\bcannot login\b',
-    r'\bcannot access\b', r'\bleakage\b', r'\bwater leak\b', r'\bpower cut\b',
-    r'\bbroken\b', r'\bfailed transaction\b', r'\bserver down\b',
-    r'\bunable to open\b', r'\bdeadline tomorrow\b', r'\bsevere\b',
-    r'\bcannot download\b'
+    # Exams, Results & Academic Deadlines
+    r'\bexam tomorrow\b', r'\bexam is tomorrow\b', r'\bhall ticket\b', r'\badmit card\b',
+    r'\bexam registration\b', r'\bsupplementary exam\b', r'\brevaluation deadline\b',
+    r'\binternal marks\b', r'\bmarks discrepancy\b', r'\battendance shortage\b',
+    r'\bdetention\b', r'\bcondonation\b', r'\bsemester results\b', r'\bresult correction\b',
+    
+    # Critical Infrastructure, IT & Living Outages
+    r'\bnot working\b', r'\bportal is down\b', r'\bcannot login\b', r'\bcannot access\b',
+    r'\bfailed transaction\b', r'\bmoney deducted\b', r'\bfee payment failed\b',
+    r'\bwater leak\b', r'\bleakage\b', r'\bno water\b', r'\bpower cut\b', r'\bblackout\b',
+    r'\bbroken\b', r'\bserver down\b', r'\bunable to open\b', r'\bdeadline tomorrow\b',
+    r'\bsevere\b', r'\bcannot download\b', r'\bfood poisoning\b', r'\bspoiled food\b',
+    r'\bdrinking water contaminated\b'
 ]
 
 MEDIUM_PRIORITY_PATTERNS = [
     r'\bnot updated\b', r'\bpending\b', r'\bcorrection\b', r'\bdelay\b',
     r'\bdiscrepancy\b', r'\bstatus\b', r'\brenewal\b', r'\bapplied\b',
-    r'\bwaiting for\b', r'\bnot credited\b', r'\bdeducted\b'
+    r'\bwaiting for\b', r'\bnot credited\b', r'\bdeducted\b', r'\bsyllabus\b',
+    r'\btimetable\b', r'\bbonafide\b', r'\bstudy certificate\b', r'\bbus route\b'
 ]
 
 LOW_PRIORITY_PATTERNS = [
     r'\btimings\b', r'\btiming\b', r'\bprocedure\b', r'\bprocess\b',
     r'\bhow to\b', r'\bcan i know\b', r'\binformation\b', r'\bquery\b',
     r'\bwhat is\b', r'\bwhere can\b', r'\bguidelines\b', r'\brules\b',
-    r'\bgeneral\b', r'\bdetails regarding\b', r'\bworking hours\b'
+    r'\bgeneral\b', r'\bdetails regarding\b', r'\bworking hours\b', r'\bgeneral query\b'
 ]
 
 def clean_text(text):

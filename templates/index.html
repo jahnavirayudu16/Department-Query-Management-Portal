@@ -22,7 +22,7 @@
         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary btn-lg">
           ⚡ Go to Central Admin Cockpit
         </a>
-        {% elif current_user.role == 'staff' %}
+        {% elif current_user.role in ['staff', 'hod'] %}
         <a href="{{ url_for('department_dashboard') }}" class="btn btn-primary btn-lg">
           📥 Go to Department Desk
         </a>
@@ -142,36 +142,24 @@
     </div>
   </div>
 
-  <!-- Fast Demo Account Access Strip -->
+  <!-- Fast Demo Account Access Strip (Student & Faculty Only) -->
   <div class="card" style="background: #ffffff; border: 1px solid var(--border-color); padding: 2rem; box-shadow: var(--shadow); margin-bottom: 3rem;">
     <div style="text-align: center; margin-bottom: 1.5rem;">
       <h3 style="font-size: 1.3rem; font-weight: 800; color: #0f172a;">Ready to test the live portal?</h3>
       <p style="color: var(--text-muted); font-size: 0.9rem;">Sign in instantly using preloaded demo credentials:</p>
     </div>
 
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
-        <div style="font-weight: 800; font-size: 0.95rem; color: #0284c7;">👨‍🎓 Student</div>
-        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">student@college.com</div>
-        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: student123</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; max-width: 600px; margin: 0 auto;">
+      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1.25rem; text-align: center; text-decoration: none; transition: transform 0.2s;">
+        <div style="font-weight: 800; font-size: 1.1rem; color: #0284c7; margin-bottom: 0.35rem;">👨‍🎓 Student</div>
+        <div style="font-size: 0.88rem; color: #0f172a; font-weight: 600;">student@college.com</div>
+        <div style="font-size: 0.78rem; color: #64748b; margin-top: 4px;">Password: <code>student123</code></div>
       </a>
 
-      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
-        <div style="font-weight: 800; font-size: 0.95rem; color: #b45309;">👩‍🏫 Faculty</div>
-        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">faculty@college.com</div>
-        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: faculty123</div>
-      </a>
-
-      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
-        <div style="font-weight: 800; font-size: 0.95rem; color: #6d28d9;">🏢 Department Staff</div>
-        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">staff@college.com</div>
-        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: staff123</div>
-      </a>
-
-      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1rem;">
-        <div style="font-weight: 800; font-size: 0.95rem; color: #b91c1c;">⚡ Central Admin</div>
-        <div style="font-size: 0.85rem; color: #0f172a; font-weight: 600;">admin@college.com</div>
-        <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Pass: admin123</div>
+      <a href="{{ url_for('login') }}" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 1.25rem; text-align: center; text-decoration: none; transition: transform 0.2s;">
+        <div style="font-weight: 800; font-size: 1.1rem; color: #b45309; margin-bottom: 0.35rem;">👩‍🏫 Faculty</div>
+        <div style="font-size: 0.88rem; color: #0f172a; font-weight: 600;">faculty@college.com</div>
+        <div style="font-size: 0.78rem; color: #64748b; margin-top: 4px;">Password: <code>faculty123</code></div>
       </a>
     </div>
   </div>

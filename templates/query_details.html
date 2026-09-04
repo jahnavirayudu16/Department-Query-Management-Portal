@@ -45,15 +45,80 @@
         </div>
       </div>
 
+      <!-- Multi-Party Live Presence Bar (Submitter, HOD, Staff) -->
+      <div class="card" style="margin-bottom: 1rem; padding: 0.85rem 1.25rem; background: #ffffff; border: 1px solid #e2e8f0;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.6rem;">
+          👥 Active Query Participants & Online Status
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
+          
+          <!-- 1. Submitter Status -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.6rem 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+            <div style="position: relative;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: #4f46e5; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem;">
+                {{ submitter_presence.name[:1] if submitter_presence else 'S' }}
+              </div>
+              <span class="user-presence-dot" data-user-id="{{ query.user_id }}" style="position: absolute; bottom: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; background: {% if submitter_presence and submitter_presence.is_online %}#16a34a{% else %}#94a3b8{% endif %};"></span>
+            </div>
+            <div style="overflow: hidden;">
+              <div style="font-size: 0.82rem; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                {{ submitter_presence.name if submitter_presence else 'Submitter' }}
+              </div>
+              <div class="user-presence-text" data-user-id="{{ query.user_id }}" style="font-size: 0.7rem; color: {% if submitter_presence and submitter_presence.is_online %}#16a34a{% else %}#64748b{% endif %}; font-weight: 600;">
+                {% if submitter_presence and submitter_presence.is_online %}🟢 Online Now{% elif submitter_presence and submitter_presence.last_active %}{{ submitter_presence.last_active | timeago }}{% else %}Offline{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Branch HOD Status -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.6rem 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+            <div style="position: relative;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: #8b5cf6; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem;">
+                🎓
+              </div>
+              <span class="user-presence-dot" {% if hod_presence and hod_presence.id %}data-user-id="{{ hod_presence.id }}"{% endif %} style="position: absolute; bottom: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; background: {% if hod_presence and hod_presence.is_online %}#16a34a{% else %}#94a3b8{% endif %};"></span>
+            </div>
+            <div style="overflow: hidden;">
+              <div style="font-size: 0.82rem; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                {{ hod_presence.name if hod_presence else 'Branch HOD' }}
+              </div>
+              <div class="user-presence-text" {% if hod_presence and hod_presence.id %}data-user-id="{{ hod_presence.id }}"{% endif %} style="font-size: 0.7rem; color: {% if hod_presence and hod_presence.is_online %}#16a34a{% else %}#64748b{% endif %}; font-weight: 600;">
+                {% if hod_presence and hod_presence.is_online %}🟢 Online Now{% elif hod_presence and hod_presence.last_active %}{{ hod_presence.last_active | timeago }}{% else %}Offline{% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Assigned Staff Status -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.6rem 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+            <div style="position: relative;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: #0284c7; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem;">
+                👤
+              </div>
+              <span class="user-presence-dot" {% if query.assigned_staff_id %}data-user-id="{{ query.assigned_staff_id }}"{% endif %} style="position: absolute; bottom: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; background: {% if staff_presence and staff_presence.is_online %}#16a34a{% else %}#94a3b8{% endif %};"></span>
+            </div>
+            <div style="overflow: hidden;">
+              <div style="font-size: 0.82rem; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                {{ staff_presence.name if staff_presence else 'Pending Staff Assignment' }}
+              </div>
+              <div class="user-presence-text" {% if query.assigned_staff_id %}data-user-id="{{ query.assigned_staff_id }}"{% endif %} style="font-size: 0.7rem; color: {% if staff_presence and staff_presence.is_online %}#16a34a{% elif staff_presence and staff_presence.last_active %}#64748b{% else %}#b45309{% endif %}; font-weight: 600;">
+                {% if staff_presence and staff_presence.is_online %}🟢 Online Now{% elif staff_presence and staff_presence.last_active %}{{ staff_presence.last_active | timeago }}{% else %}Awaiting HOD assignment{% endif %}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
       <!-- Real-Time Chat Container -->
       <div class="chat-container" id="chatContainer" data-query-id="{{ query.id }}" data-user-id="{{ current_user.id }}" data-user-name="{{ current_user.role | capitalize }}">
-        <div class="chat-header">
-          <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
-            <span>💬 Live Query Communication</span>
-            <span style="font-size: 0.72rem; color: var(--success); font-weight: 600;">● Real-time Active</span>
+        <div class="chat-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-weight: 800; font-size: 0.95rem; color: #0f172a;">💬 Live Multi-Party Conversation</span>
+            <span class="badge badge-sm badge-status-assigned">Submitter • HOD • Assigned Staff</span>
           </div>
-          <div id="typingStatus" style="font-size: 0.75rem; color: var(--text-muted); font-style: italic; display: none;"></div>
+          <div id="typingStatus" style="font-size: 0.78rem; color: #4338ca; font-style: italic; font-weight: 600; display: none;"></div>
         </div>
+
 
         <!-- Chat Stream -->
         <div class="chat-messages" id="chatMessages">
@@ -63,15 +128,16 @@
               <strong>
                 {% if m.sender_role == 'student' %}Student
                 {% elif m.sender_role == 'faculty' %}Faculty Member
+                {% elif m.sender_role == 'hod' %}Head of Department (HOD)
                 {% elif m.sender_role == 'staff' %}Department Staff
                 {% else %}Administrator{% endif %}
               </strong>
-              <span class="badge badge-sm {% if m.sender_role == 'student' %}badge-low{% elif m.sender_role == 'faculty' %}badge-medium{% else %}badge-status-assigned{% endif %}">
+              <span class="badge badge-sm {% if m.sender_role == 'student' %}badge-low{% elif m.sender_role == 'faculty' %}badge-medium{% elif m.sender_role == 'hod' %}badge-urgent{% else %}badge-status-assigned{% endif %}">
                 {{ m.sender_role | upper }}
               </span>
               <span>{{ m.created_at | timeago }}</span>
               {% if m.is_internal_note %}
-              <span class="badge badge-urgent">Internal Staff Note</span>
+              <span class="badge badge-urgent">Internal Note</span>
               {% endif %}
             </div>
             <div class="message-body">
@@ -86,21 +152,21 @@
           {% endfor %}
         </div>
 
-        <!-- Chat Input Form (Staff and Student/Faculty Only; Admin has no chat input) -->
+        <!-- Chat Input Form (Staff, HOD, and Student/Faculty; Admin monitors) -->
         {% if current_user.role != 'admin' %}
         <div class="chat-input-area">
           <form id="chatForm" method="POST" action="{{ url_for('post_message', query_id=query.id) }}" enctype="multipart/form-data">
             <div style="display: flex; flex-direction: column; width: 100%; gap: 0.5rem;">
               
-              {% if current_user.role == 'staff' %}
+              {% if current_user.role in ['staff', 'hod'] or (current_user.role == 'faculty' and query.assigned_staff_id == current_user.id) %}
               <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #b45309;">
                 <input type="checkbox" id="internalNoteCheck" name="is_internal_note" value="true">
-                <label for="internalNoteCheck" style="cursor: pointer; font-weight: 600;">🔒 Post as Private Internal Note (Staff Only)</label>
+                <label for="internalNoteCheck" style="cursor: pointer; font-weight: 600;">🔒 Post as Private Internal Note (Staff/HOD Only)</label>
               </div>
               {% endif %}
 
               <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <input type="text" id="messageInput" name="message" class="form-control" placeholder="Type your response or question here..." autocomplete="off">
+                <input type="text" id="messageInput" name="message" class="form-control" placeholder="{% if current_user.role == 'hod' %}Type response to student or assignment note...{% else %}Type your response or question here...{% endif %}" autocomplete="off">
                 
                 <label for="chatAttachment" class="btn btn-secondary" style="padding: 0.7rem 0.9rem; cursor: pointer;" title="Attach file">
                   📎
@@ -126,23 +192,27 @@
     <!-- RIGHT COLUMN: Actions & Query Information -->
     <div style="display: flex; flex-direction: column; gap: 1.25rem;">
 
-      <!-- CENTRAL ADMIN CONTROLS: Staff Assignment, Priority, Re-route & Staff Details -->
-      {% if current_user.role == 'admin' %}
+      <!-- HOD & CENTRAL ADMIN CONTROLS: Staff Assignment, Priority, Re-route -->
+      {% if current_user.role in ['admin', 'hod'] %}
       <div class="card" style="border-top: 4px solid var(--primary); background: #ffffff;">
         <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 1rem; color: #1e1b4b; display: flex; align-items: center; gap: 0.4rem;">
-          ⚡ Central Admin Assignment Desk
+          {% if current_user.role == 'hod' %}
+            🎓 {{ current_user.department or 'Department' }} HOD Assignment Desk
+          {% else %}
+            ⚡ Central Admin Assignment Desk
+          {% endif %}
         </h3>
 
         <!-- Assignment & Re-Routing Form -->
         <form method="POST" action="{{ url_for('reassign_query', query_id=query.id) }}">
           
           <div class="form-group">
-            <label class="form-label" style="font-weight: 700;">Assign Staff Member *</label>
+            <label class="form-label" style="font-weight: 700;">Assign Department Staff *</label>
             <select name="assigned_staff_id" class="form-control" style="font-size: 0.85rem;">
               <option value="">-- Select Staff to Assign --</option>
               {% for s in dept_staff %}
               <option value="{{ s.id }}" {% if query.assigned_staff_id == s.id %}selected{% endif %}>
-                👤 {{ s.name }} ({{ s.department or 'Central' }} Staff)
+                👤 {{ s.name }} ({{ s.designation or s.department or 'Staff' }})
               </option>
               {% endfor %}
             </select>
@@ -151,12 +221,14 @@
           <div class="form-group">
             <label class="form-label" style="font-weight: 700;">Priority Level</label>
             <select name="priority" class="form-control" style="font-size: 0.85rem;">
+              <option value="Urgent" {% if query.priority == 'Urgent' %}selected{% endif %}>Urgent Priority</option>
               <option value="High" {% if query.priority == 'High' %}selected{% endif %}>High Priority</option>
               <option value="Medium" {% if query.priority == 'Medium' %}selected{% endif %}>Medium Priority</option>
               <option value="Low" {% if query.priority == 'Low' %}selected{% endif %}>Low Priority</option>
             </select>
           </div>
 
+          {% if current_user.role == 'admin' %}
           <div class="form-group">
             <label class="form-label" style="font-weight: 700;">Re-Route Department</label>
             <select name="department" class="form-control" style="font-size: 0.85rem;">
@@ -165,40 +237,41 @@
               {% endfor %}
             </select>
           </div>
+          {% endif %}
 
           <button type="submit" class="btn btn-primary btn-sm" style="width: 100%; font-weight: 700; padding: 0.6rem;">
-            💾 Save Staff Assignment & Priority
+            💾 Confirm Staff Assignment
           </button>
         </form>
       </div>
+      {% endif %}
 
-      <!-- Assigned Staff Member Detailed Profile Card (For Admin) -->
+      <!-- Assigned Staff Member Detailed Profile Card (Visible to Student, HOD, and Staff) -->
       <div class="card" style="background: #f8fafc; border: 1px solid var(--border-color);">
         <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-main);">
-          👤 Assigned Staff Details
+          👤 Assigned Resolver / Staff Details
         </h3>
         {% if query.staff_name %}
         <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.4rem;">
-          <div><strong>Name:</strong> {{ query.staff_name }}</div>
+          <div><strong>Resolver Name:</strong> {{ query.staff_name }}</div>
           <div><strong>Department:</strong> {{ query.staff_department or query.department }}</div>
-          <div><strong>Email:</strong> {{ query.staff_email or 'N/A' }}</div>
+          <div><strong>Official Email:</strong> {{ query.staff_email or 'N/A' }}</div>
           {% if query.staff_designation %}
           <div><strong>Designation:</strong> {{ query.staff_designation }}</div>
           {% endif %}
         </div>
         {% else %}
-        <p style="font-size: 0.85rem; color: var(--warning); margin: 0; font-weight: 600;">
-          ⚠️ No staff assigned yet. Please assign a staff member above.
+        <p style="font-size: 0.85rem; color: #b45309; margin: 0; font-weight: 600;">
+          ⏳ Awaiting staff assignment by HOD / Central Admin.
         </p>
         {% endif %}
       </div>
-      {% endif %}
 
-      <!-- DEPARTMENT STAFF CONTROLS: Query Resolution & Status Update -->
-      {% if current_user.role == 'staff' %}
+      <!-- RESOLVER CONTROLS: Query Resolution & Status Update (Assigned Staff / Resolver Only) -->
+      {% if (current_user.role in ['staff', 'faculty'] and query.assigned_staff_id == current_user.id) or current_user.role == 'admin' %}
       <div class="card" style="border-top: 4px solid var(--success); background: #ffffff;">
         <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 1rem; color: #166534;">
-          ⚙️ Staff Query Resolution
+          ⚙️ Resolution & Status Desk
         </h3>
         
         <!-- Status Update Form -->

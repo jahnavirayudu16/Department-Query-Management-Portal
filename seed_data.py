@@ -16,19 +16,13 @@ def seed_database(force_reset=True):
     cursor = conn.cursor()
     
     if force_reset:
-        cursor.execute("DELETE FROM feedback")
-        cursor.execute("DELETE FROM attachments")
-        cursor.execute("DELETE FROM audit_logs")
-        cursor.execute("DELETE FROM notifications")
-        cursor.execute("DELETE FROM messages")
-        cursor.execute("DELETE FROM queries")
-        cursor.execute("DELETE FROM users")
-        cursor.execute("DELETE FROM departments")
-        try:
-            cursor.execute("DELETE FROM sqlite_sequence")
-        except Exception:
-            pass
+        cursor.execute("PRAGMA foreign_keys = OFF")
+        tables = ['feedback', 'attachments', 'audit_logs', 'notifications', 'messages', 'queries', 'users', 'departments']
+        for t in tables:
+            cursor.execute(f"DROP TABLE IF EXISTS {t}")
         conn.commit()
+        init_db(conn)
+        cursor.execute("PRAGMA foreign_keys = ON")
     
     # Check if 3 departments already exist
     cursor.execute("SELECT COUNT(*) FROM departments")
@@ -50,30 +44,56 @@ def seed_database(force_reset=True):
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
         now = datetime.now()
-        print("Seeding pristine 3-category demo users...")
+        print("Seeding pristine demo users and HODs across multiple departments...")
         users_data = [
-            # 1. Student (Anonymous)
-            ('Student', 'student@college.com', generate_password_hash('student123'), 'student', 'Computer Science & Engineering (CSE)', 'B.Tech', 3, '', '', 'Student', 1),
+            # 1. Main Student (CSE - 3rd Year)
+            ('Student (CSE 3rd Yr)', 'student@college.com', generate_password_hash('student123'), 'student', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', 3, '', '', 'Student', 1),
             
-            # 2. Faculty
-            ('Faculty Member', 'faculty@college.com', generate_password_hash('faculty123'), 'faculty', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'Faculty', 1),
+            # 2. Additional Students for Year & Dept Analytics (B.Tech, Degree, MBA, MCA, Diploma)
+            ('Student (CSE 1st Yr)', 'student-cse1@college.com', generate_password_hash('student123'), 'student', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', 1, '', '', 'Student', 1),
+            ('Student (AI & ML 2nd Yr)', 'student-aiml@college.com', generate_password_hash('student123'), 'student', 'UG', 'Artificial Intelligence & Machine Learning (AIML)', 'B.Tech', 2, '', '', 'Student', 1),
+            ('Student (AI & DS 3rd Yr)', 'student-ds@college.com', generate_password_hash('student123'), 'student', 'UG', 'Artificial Intelligence & Data Science (AIDS)', 'B.Tech', 3, '', '', 'Student', 1),
+            ('Student (ECE 2nd Yr)', 'student-ece@college.com', generate_password_hash('student123'), 'student', 'UG', 'Electronics & Communication Engineering (ECE)', 'B.Tech', 2, '', '', 'Student', 1),
+            ('Student (ME 4th Yr)', 'student-me@college.com', generate_password_hash('student123'), 'student', 'UG', 'Mechanical Engineering (Mech)', 'B.Tech', 4, '', '', 'Student', 1),
+            ('Student (Civil 1st Yr)', 'student-civil@college.com', generate_password_hash('student123'), 'student', 'UG', 'Civil Engineering (Civil)', 'B.Tech', 1, '', '', 'Student', 1),
+            ('Student (BCA 1st Yr)', 'student-bca@college.com', generate_password_hash('student123'), 'student', 'UG', 'Bachelor of Computer Applications (BCA)', 'Degree', 1, '', '', 'Student', 1),
+            ('Student (MBA 2nd Yr)', 'student-mba@college.com', generate_password_hash('student123'), 'student', 'PG', 'MBA (Business Analytics)', 'MBA', 2, '', '', 'Student', 1),
+            ('Student (MCA 1st Yr)', 'student-mca@college.com', generate_password_hash('student123'), 'student', 'PG', 'Master of Computer Applications (MCA - Regular)', 'MCA', 1, '', '', 'Student', 1),
+            ('Student (Diploma Mech 2nd Yr)', 'student-diploma@college.com', generate_password_hash('student123'), 'student', 'Diploma', 'Diploma in Mechanical Engineering (DME)', 'Diploma', 2, '', '', 'Student', 1),
+
+            # 3. Faculty
+            ('Faculty Member', 'faculty@college.com', generate_password_hash('faculty123'), 'faculty', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'Assistant Professor', 1),
             
-            # 3. Academics Staff
-            ('Dr. Alan Turing', 'academics-staff@college.com', generate_password_hash('staff123'), 'staff', 'Academics', None, None, '', '', 'Academics Coordinator', 1),
+            # 4. Department HODs
+            ('Dr. Grace Hopper (CSE HOD)', 'cse-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'Head of Department (CSE)', 1),
+            ('Prof. Ada Lovelace (ECE HOD)', 'ece-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Electronics & Communication Engineering (ECE)', 'B.Tech', None, '', '', 'Head of Department (ECE)', 1),
+            ('Dr. Nikola Tesla (Mech HOD)', 'mech-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Mechanical Engineering (Mech)', 'B.Tech', None, '', '', 'Head of Department (Mechanical)', 1),
+            ('Prof. Dennis Ritchie (BCA HOD)', 'bca-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Bachelor of Computer Applications (BCA)', 'Degree', None, '', '', 'Head of Department (BCA)', 1),
+            ('Dr. Alexander Fleming (Pharmacy HOD)', 'pharm-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Bachelor of Pharmacy (B.Pharm - Core)', 'B.Pharmacy', None, '', '', 'Head of Department (Pharmacy)', 1),
+            ('Dr. Peter Drucker (MBA HOD)', 'mba-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'MBA (Business Analytics)', 'MBA', None, '', '', 'Head of Department (MBA)', 1),
+            ('Dr. Barbara Liskov (MCA HOD)', 'mca-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'Master of Computer Applications (MCA - Regular)', 'MCA', None, '', '', 'Head of Department (MCA)', 1),
+            ('Dr. Claude Shannon (M.Tech HOD)', 'mtech-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'M.Tech (Computer Science & Engineering)', 'M.Tech', None, '', '', 'Head of Department (M.Tech)', 1),
+            ('Prof. James Gosling (Diploma HOD)', 'diploma-hod@college.com', generate_password_hash('hod123'), 'hod', 'Diploma', 'Diploma in Computer Engineering (DCME)', 'Diploma (Polytechnic)', None, '', '', 'Head of Department (Diploma)', 1),
             
-            # 4. Administrative Staff
-            ('Mrs. Eleanor Wright', 'admin-staff@college.com', generate_password_hash('staff123'), 'staff', 'Administrative', None, None, '', '', 'Administrative Officer', 1),
+            # 5. CSE Department Staff
+            ('Prof. Linus Torvalds', 'cse-staff@college.com', generate_password_hash('staff123'), 'staff', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'CSE Department Coordinator', 1),
+
+            # 6. Academics Staff
+            ('Dr. Alan Turing', 'academics-staff@college.com', generate_password_hash('staff123'), 'staff', None, 'Academics', None, None, '', '', 'Academics Coordinator', 1),
             
-            # 5. Others Staff
-            ('David Kumar', 'staff@college.com', generate_password_hash('staff123'), 'staff', 'Others', None, None, '', '', 'Campus Support Lead', 1),
+            # 7. Administrative Staff
+            ('Mrs. Eleanor Wright', 'admin-staff@college.com', generate_password_hash('staff123'), 'staff', None, 'Administrative', None, None, '', '', 'Administrative Officer', 1),
             
-            # 6. Admin
-            ('Central Administrator', 'admin@college.com', generate_password_hash('admin123'), 'admin', None, None, None, '', '', 'Central Administrator', 1)
+            # 8. Others Staff
+            ('David Kumar', 'staff@college.com', generate_password_hash('staff123'), 'staff', None, 'Others', None, None, '', '', 'Campus Support Lead', 1),
+            
+            # 9. Central Admin
+            ('Central Administrator', 'admin@college.com', generate_password_hash('admin123'), 'admin', None, None, None, None, '', '', 'Central Administrator', 1)
         ]
         
         cursor.executemany("""
-            INSERT INTO users (name, email, password_hash, role, department, course, year, phone, roll_no, designation, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (name, email, password_hash, role, level, department, course, year, phone, roll_no, designation, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, users_data)
         conn.commit()
         
@@ -81,59 +101,236 @@ def seed_database(force_reset=True):
         cursor.execute("SELECT id, email FROM users")
         user_id_map = {row[1]: row[0] for row in cursor.fetchall()}
         
-        student_uid = user_id_map.get('student@college.com')
+        s_cse3 = user_id_map.get('student@college.com')
+        s_cse1 = user_id_map.get('student-cse1@college.com')
+        s_aiml = user_id_map.get('student-aiml@college.com')
+        s_ds3 = user_id_map.get('student-ds@college.com')
+        s_ece2 = user_id_map.get('student-ece@college.com')
+        s_me4 = user_id_map.get('student-me@college.com')
+        s_civ1 = user_id_map.get('student-civil@college.com')
+        s_bca1 = user_id_map.get('student-bca@college.com')
+        s_mba2 = user_id_map.get('student-mba@college.com')
+        s_mca1 = user_id_map.get('student-mca@college.com')
+        s_dip2 = user_id_map.get('student-diploma@college.com')
+        fac_uid = user_id_map.get('faculty@college.com')
+
+        cse_staff_uid = user_id_map.get('cse-staff@college.com')
         acad_staff_uid = user_id_map.get('academics-staff@college.com')
         admin_staff_uid = user_id_map.get('admin-staff@college.com')
         others_staff_uid = user_id_map.get('staff@college.com')
         
-        print("Seeding sample queries across 3 categories: Academics, Administrative, Others...")
+        print("Seeding diverse queries across all departments, branches, and student years...")
         sample_queries = [
-            # Academics (Handled by Dr. Alan Turing)
+            # CSE Queries
             {
-                'user_id': student_uid,
-                'title': 'Internal marks incorrect for DSP subject',
-                'description': 'In the recently published internal assessment portal, my marks for Digital Signal Processing are entered as 12/30, whereas my corrected answer sheet showed 27/30.',
+                'user_id': s_cse3,
+                'title': 'Operating Systems Lab System 14 Crash during practical',
+                'description': 'System 14 in CSE Lab 2 has an OS kernel panic during Linux threading experiments. Need replacement.',
                 'category': 'Academics',
-                'department': 'Academics',
+                'department': 'Computer Science & Engineering (CSE)',
                 'priority': 'High',
                 'status': 'In Progress',
-                'assigned_staff_id': acad_staff_uid,
+                'assigned_staff_id': cse_staff_uid,
                 'created_at': now - timedelta(hours=5),
                 'first_response_at': now - timedelta(hours=4, minutes=45),
                 'updated_at': now - timedelta(hours=2)
             },
             {
-                'user_id': student_uid,
-                'title': 'Attendance percentage shortage correction in LMS',
-                'description': 'My attendance for Operating Systems shows 64% due to medical leave not being approved yet. I have submitted the medical certificate to the department.',
+                'user_id': s_cse3,
+                'title': 'Data Structures Internal Marks Discrepancy',
+                'description': 'Midterm 2 marks for DSA are uploaded as 14/30 instead of 28/30. Answer script verified with lecturer.',
                 'category': 'Academics',
-                'department': 'Academics',
+                'department': 'Computer Science & Engineering (CSE)',
                 'priority': 'High',
                 'status': 'New',
-                'assigned_staff_id': acad_staff_uid,
+                'assigned_staff_id': None, # Unassigned for CSE HOD to assign!
                 'created_at': now - timedelta(hours=3),
                 'first_response_at': None,
                 'updated_at': now - timedelta(hours=3)
             },
             {
-                'user_id': student_uid,
-                'title': 'Cannot download hall ticket for supplementary exam',
-                'description': 'When clicking download admit card for 3rd semester supplementary exam, the server gives an invalid token error. Exam starts in two days.',
+                'user_id': s_cse1,
+                'title': 'Cannot access Python Lab Portal from hostel',
+                'description': '1st year CSE student unable to login to Python online lab portal server.',
                 'category': 'Academics',
-                'department': 'Academics',
-                'priority': 'High',
-                'status': 'Assigned',
-                'assigned_staff_id': acad_staff_uid,
-                'created_at': now - timedelta(hours=1),
-                'first_response_at': now - timedelta(minutes=45),
-                'updated_at': now - timedelta(minutes=30)
+                'department': 'Computer Science & Engineering (CSE)',
+                'priority': 'Medium',
+                'status': 'New',
+                'assigned_staff_id': None,
+                'created_at': now - timedelta(hours=2),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=2)
             },
             
-            # Administrative (Handled by Mrs. Eleanor Wright)
+            # AI & ML (2nd Year)
             {
-                'user_id': student_uid,
-                'title': 'My semester fee payment of 45,000 is not updated',
-                'description': 'I completed the semester fee payment via NetBanking yesterday with Ref #TXN983241, but my student account still shows dues pending.',
+                'user_id': s_aiml,
+                'title': 'GPU Server access for Deep Learning Lab',
+                'description': '2nd year AI&ML batch requesting access keys for the Deep Learning CUDA workstation in Lab 4.',
+                'category': 'Academics',
+                'department': 'CSE (AI & Machine Learning)',
+                'priority': 'High',
+                'status': 'New',
+                'assigned_staff_id': None,
+                'created_at': now - timedelta(hours=4),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=4)
+            },
+
+            # Data Science (3rd Year)
+            {
+                'user_id': s_ds3,
+                'title': 'Big Data Analytics dataset cluster permission denied',
+                'description': 'Hadoop cluster nodes returning authorization error when executing map-reduce jobs for semester assignment.',
+                'category': 'Academics',
+                'department': 'CSE (Data Science)',
+                'priority': 'Medium',
+                'status': 'New',
+                'assigned_staff_id': None,
+                'created_at': now - timedelta(hours=7),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=7)
+            },
+
+            # ECE Queries (2nd Year)
+            {
+                'user_id': s_ece2,
+                'title': 'Digital Logic Design lab kit malfunction',
+                'description': 'Breadboards and IC timer kits in ECE Lab 1 are faulty and not providing stable 5V output.',
+                'category': 'Academics',
+                'department': 'Electronics & Communication Engineering (ECE)',
+                'priority': 'High',
+                'status': 'New',
+                'assigned_staff_id': None,
+                'created_at': now - timedelta(hours=6),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=6)
+            },
+            {
+                'user_id': s_ece2,
+                'title': 'Attendance shortage due to medical leave not recorded',
+                'description': 'Medical leave submitted for 4 days fever in ECE department office is still showing absent in portal.',
+                'category': 'Academics',
+                'department': 'Electronics & Communication Engineering (ECE)',
+                'priority': 'Medium',
+                'status': 'In Progress',
+                'assigned_staff_id': acad_staff_uid,
+                'created_at': now - timedelta(days=1),
+                'first_response_at': now - timedelta(hours=20),
+                'updated_at': now - timedelta(hours=10)
+            },
+
+            # Mechanical Engineering (4th Year)
+            {
+                'user_id': s_me4,
+                'title': 'Final Year Major Project Guide allocation request',
+                'description': '4th year ME batch #4 requesting Robotics / Automation faculty guide approval.',
+                'category': 'Academics',
+                'department': 'Mechanical Engineering (ME)',
+                'priority': 'Medium',
+                'status': 'In Progress',
+                'assigned_staff_id': acad_staff_uid,
+                'created_at': now - timedelta(days=1, hours=4),
+                'first_response_at': now - timedelta(days=1),
+                'updated_at': now - timedelta(hours=8)
+            },
+
+            # Civil Engineering (1st Year)
+            {
+                'user_id': s_civ1,
+                'title': 'Engineering Mechanics tutorial class schedule conflict',
+                'description': '1st year Civil tutorial clashes with Physics laboratory on Thursday afternoon.',
+                'category': 'Academics',
+                'department': 'Civil Engineering (CE)',
+                'priority': 'Low',
+                'status': 'Resolved',
+                'assigned_staff_id': acad_staff_uid,
+                'created_at': now - timedelta(days=2),
+                'first_response_at': now - timedelta(days=1, hours=20),
+                'resolved_at': now - timedelta(days=1, hours=10),
+                'updated_at': now - timedelta(days=1, hours=10)
+            },
+
+            # BCA (1st Year)
+            {
+                'user_id': s_bca1,
+                'title': 'Web Technologies HTML5/CSS Lab record verification',
+                'description': 'BCA 1st year web design lab manual submissions and viva dates clarification needed.',
+                'category': 'Academics',
+                'department': 'Bachelor of Computer Applications (BCA)',
+                'priority': 'Medium',
+                'status': 'New',
+                'assigned_staff_id': None,
+                'created_at': now - timedelta(hours=8),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=8)
+            },
+
+            # MBA (2nd Year)
+            {
+                'user_id': s_mba2,
+                'title': 'Business Analytics SPSS Software license expired',
+                'description': 'SPSS statistics tool license in MBA computer laboratory expired yesterday. Midterm project pending.',
+                'category': 'Academics',
+                'department': 'MBA (Business Analytics)',
+                'priority': 'High',
+                'status': 'New',
+                'assigned_staff_id': None,
+                'created_at': now - timedelta(hours=3),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=3)
+            },
+
+            # MCA (1st Year)
+            {
+                'user_id': s_mca1,
+                'title': 'Advanced Java Frameworks elective registration',
+                'description': 'Option to select Spring Boot / Cloud Microservices elective is not appearing on the student portal.',
+                'category': 'Academics',
+                'department': 'Master of Computer Applications (MCA - Regular)',
+                'priority': 'Medium',
+                'status': 'In Progress',
+                'assigned_staff_id': acad_staff_uid,
+                'created_at': now - timedelta(days=1),
+                'first_response_at': now - timedelta(hours=14),
+                'updated_at': now - timedelta(hours=6)
+            },
+
+            # Diploma Mechanical (2nd Year)
+            {
+                'user_id': s_dip2,
+                'title': 'Workshop lathe machine safety guard maintenance',
+                'description': 'Safety guard on CNC Lathe machine #3 in Diploma mechanical workshop is loose.',
+                'category': 'Academics',
+                'department': 'Diploma in Mechanical Engineering (DME)',
+                'priority': 'High',
+                'status': 'New',
+                'assigned_staff_id': None,
+                'created_at': now - timedelta(hours=5),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=5)
+            },
+
+            # Faculty Academic Query
+            {
+                'user_id': fac_uid,
+                'title': 'Smart Board projector HDMI input not responding in Seminar Hall 1',
+                'description': 'Digital interactive podium display is showing No Signal. Faculty guest lecture at 3 PM today.',
+                'category': 'Academics',
+                'department': 'Computer Science & Engineering (CSE)',
+                'priority': 'High',
+                'status': 'In Progress',
+                'assigned_staff_id': cse_staff_uid,
+                'created_at': now - timedelta(hours=1, minutes=30),
+                'first_response_at': now - timedelta(minutes=45),
+                'updated_at': now - timedelta(minutes=45)
+            },
+
+            # Administrative Wing Queries
+            {
+                'user_id': s_cse3,
+                'title': 'Semester tuition fee payment of 45,000 not updated',
+                'description': 'Completed fee payment via NetBanking with Ref #TXN983241, but account still shows dues.',
                 'category': 'Administrative',
                 'department': 'Administrative',
                 'priority': 'Medium',
@@ -144,9 +341,9 @@ def seed_database(force_reset=True):
                 'updated_at': now - timedelta(hours=2)
             },
             {
-                'user_id': student_uid,
-                'title': 'Need urgent bonafide certificate for passport application',
-                'description': 'I require an urgent bonafide certificate stating that I am a regular student for passport appointment verification next week.',
+                'user_id': s_me4,
+                'title': 'Urgent Bonafide certificate for passport verification',
+                'description': 'Require bonafide certificate for visa/passport appointment scheduled for next week.',
                 'category': 'Administrative',
                 'department': 'Administrative',
                 'priority': 'Low',
@@ -157,25 +354,12 @@ def seed_database(force_reset=True):
                 'resolved_at': now - timedelta(days=1, hours=10),
                 'updated_at': now - timedelta(days=1, hours=10)
             },
+
+            # Others Desk Queries (Hostel / Wi-Fi)
             {
-                'user_id': student_uid,
-                'title': 'Scholarship disbursement amount not credited',
-                'description': 'State merit scholarship was approved in October, but the credit has not reflected in my student stipend account.',
-                'category': 'Administrative',
-                'department': 'Administrative',
-                'priority': 'Medium',
-                'status': 'New',
-                'assigned_staff_id': None,
-                'created_at': now - timedelta(hours=4),
-                'first_response_at': None,
-                'updated_at': now - timedelta(hours=4)
-            },
-            
-            # Others (Handled by David Kumar)
-            {
-                'user_id': student_uid,
-                'title': 'Campus Wi-Fi is not working in computer lab 3',
-                'description': 'The campus Wi-Fi access point in Computer Lab 3 is constantly dropping connection for all students.',
+                'user_id': s_cse1,
+                'title': 'Campus Wi-Fi connectivity dropped in South Block Hostel',
+                'description': 'Wi-Fi router on 2nd floor South Block has no internet gateway since yesterday evening.',
                 'category': 'Others',
                 'department': 'Others',
                 'priority': 'High',
@@ -186,22 +370,9 @@ def seed_database(force_reset=True):
                 'updated_at': now - timedelta(minutes=40)
             },
             {
-                'user_id': student_uid,
-                'title': 'Severe water leakage in hostel room 314',
-                'description': 'Block B Room 314 has water dripping continuously from the ceiling pipe since morning. Please send maintenance urgently.',
-                'category': 'Others',
-                'department': 'Others',
-                'priority': 'High',
-                'status': 'In Progress',
-                'assigned_staff_id': others_staff_uid,
-                'created_at': now - timedelta(hours=3),
-                'first_response_at': now - timedelta(hours=2),
-                'updated_at': now - timedelta(hours=1)
-            },
-            {
-                'user_id': student_uid,
-                'title': 'Mess food quality issue during dinner',
-                'description': 'The dinner served in the south block mess yesterday was undercooked and the drinking water cooler needs filter replacement.',
+                'user_id': s_ece2,
+                'title': 'Drinking water cooler filter replacement in Block B',
+                'description': 'Water dispenser filter indicator is red on 1st floor Block B.',
                 'category': 'Others',
                 'department': 'Others',
                 'priority': 'Medium',

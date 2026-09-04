@@ -11,7 +11,11 @@
       <div>
         <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
           <span class="badge badge-status-waiting" style="background: rgba(255,255,255,0.2); color: #fff; border: none;">
-            🏢 {{ dept }} Department Desk
+            {% if current_user.role == 'hod' %}
+              🎓 {{ dept }} Head of Department (HOD) Portal
+            {% else %}
+              🏢 {{ dept }} Department Desk
+            {% endif %}
           </span>
         </div>
         <h1 style="font-size: 1.75rem; margin-bottom: 0.25rem;">{{ dept }} Query Resolution Queue</h1>
@@ -20,18 +24,25 @@
         </p>
       </div>
 
-      {% if current_user.role == 'admin' %}
-      <div>
-        <form method="GET" action="{{ url_for('department_dashboard') }}" style="display: flex; gap: 0.5rem; align-items: center;">
-          <label style="color: #fff; font-size: 0.85rem; font-weight: 600;">Switch Dept:</label>
-          <select name="dept" class="form-control" onchange="this.form.submit()" style="padding: 0.45rem 0.75rem; font-size: 0.85rem;">
-            {% for d in DEPARTMENTS %}
-            <option value="{{ d }}" {% if dept == d %}selected{% endif %}>{{ d }}</option>
-            {% endfor %}
-          </select>
-        </form>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+        {% if current_user.role == 'hod' %}
+          <a href="{{ url_for('admin_analytics') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4); font-weight: 700;">
+            📊 Branch Analytics Pie Charts
+          </a>
+          <button type="button" onclick="openHodAdminChat()" class="btn btn-secondary btn-sm" style="background: #ffffff; color: var(--primary); font-weight: 700;">
+            💬 Chat with Central Admin
+          </button>
+        {% elif current_user.role == 'admin' %}
+          <form method="GET" action="{{ url_for('department_dashboard') }}" style="display: flex; gap: 0.5rem; align-items: center;">
+            <label style="color: #fff; font-size: 0.85rem; font-weight: 600;">Switch Dept:</label>
+            <select name="dept" class="form-control" onchange="this.form.submit()" style="padding: 0.45rem 0.75rem; font-size: 0.85rem;">
+              {% for d in DEPARTMENTS %}
+              <option value="{{ d }}" {% if dept == d %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            </select>
+          </form>
+        {% endif %}
       </div>
-      {% endif %}
     </div>
   </div>
 
@@ -95,6 +106,9 @@
     <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem; flex-wrap: wrap;">
       <a href="{{ url_for('department_dashboard', dept=dept, view='unresolved') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unresolved' or not current_view %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
         ⏳ Unresolved Problems ({{ unresolved_count }})
+      </a>
+      <a href="{{ url_for('department_dashboard', dept=dept, view='unassigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unassigned' %}background: #dc2626; color: #fff; border: none;{% else %}background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;{% endif %} padding: 0.45rem 0.9rem;">
+        ⚡ Unassigned ({{ unassigned_count }})
       </a>
       <a href="{{ url_for('department_dashboard', dept=dept, view='recent') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'recent' %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
         🆕 Recently Added
@@ -188,7 +202,7 @@
             </td>
             <td>
               {% if q.staff_name %}
-                <span style="font-size: 0.85rem; font-weight: 600;">🏢 Staff ({{ q.department }})</span>
+                <span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">👤 {{ q.staff_name }}</span>
               {% else %}
                 <span style="font-size: 0.8rem; color: var(--warning); font-weight: 600;">⚠️ Unassigned</span>
               {% endif %}
@@ -197,8 +211,12 @@
               {{ q.created_at | timeago }}
             </td>
             <td>
-              <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-primary btn-sm">
-                Open & Reply →
+              <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-primary btn-sm" style="font-weight: 700; white-space: nowrap;">
+                {% if current_user.role == 'hod' and not q.assigned_staff_id %}
+                  Assign Staff & Reply →
+                {% else %}
+                  Open & Reply →
+                {% endif %}
               </a>
             </td>
           </tr>
@@ -217,4 +235,176 @@
   </div>
 
 </div>
+
+{% if current_user.role == 'hod' %}
+<!-- HOD <-> CENTRAL ADMIN DIRECT CHAT MODAL -->
+<div id="hodAdminChatModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 9999; backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 1rem;">
+  <div style="background: #ffffff; width: 100%; max-width: 580px; height: 600px; border-radius: var(--radius-lg); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden; animation: modalFadeIn 0.2s ease-out;">
+    
+    <!-- Modal Header -->
+    <div style="padding: 1rem 1.25rem; background: linear-gradient(135deg, #1e1b4b, #4338ca); color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="width: 38px; height: 38px; border-radius: 50%; background: #ffffff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 800;">
+          ⚡
+        </div>
+        <div>
+          <h4 style="font-size: 1.05rem; font-weight: 800; margin: 0; color: #ffffff;">
+            Central Administrator Desk
+          </h4>
+          <div style="font-size: 0.75rem; color: #c7d2fe;">
+            Direct channel with Central Admin
+          </div>
+        </div>
+      </div>
+
+      <button type="button" onclick="closeHodAdminChat()" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center;">
+        ✕
+      </button>
+    </div>
+
+    <!-- Messages Body -->
+    <div id="hodAdminMessagesContainer" style="flex: 1; padding: 1rem; overflow-y: auto; background: #f8fafc; display: flex; flex-direction: column; gap: 0.75rem;">
+      <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">
+        Loading message history...
+      </div>
+    </div>
+
+    <!-- Input Footer -->
+    <form id="hodAdminChatForm" onsubmit="sendHodAdminMessage(event)" style="padding: 0.75rem 1rem; background: #ffffff; border-top: 1px solid #e2e8f0; display: flex; gap: 0.5rem;">
+      <input type="text" id="hodAdminChatInput" class="form-control" placeholder="Type a direct message to Central Admin..." required style="flex: 1;">
+      <button type="submit" class="btn btn-primary" style="font-weight: 700; padding: 0 1.25rem;">
+        Send 🚀
+      </button>
+    </form>
+  </div>
+</div>
+
+<style>
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+</style>
+
+<script>
+let hodSocket = null;
+const currentHodId = {{ current_user.id }};
+
+function openHodAdminChat() {
+  const modal = document.getElementById('hodAdminChatModal');
+  modal.style.display = 'flex';
+
+  const container = document.getElementById('hodAdminMessagesContainer');
+  container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">⏳ Loading message history...</div>';
+
+  fetch(`/api/admin-hod-messages/${currentHodId}`)
+    .then(res => res.json())
+    .then(data => {
+      renderHodAdminMessages(data.messages || []);
+    })
+    .catch(err => {
+      container.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 1rem;">Failed to load messages.</div>';
+    });
+
+  if (typeof io !== 'undefined') {
+    if (!hodSocket) {
+      hodSocket = io();
+      hodSocket.on('admin_hod_chat', function(msg) {
+        appendHodAdminMessage(msg);
+      });
+    }
+    hodSocket.emit('join_admin_hod', { hod_id: currentHodId });
+  }
+
+  setTimeout(() => {
+    document.getElementById('hodAdminChatInput').focus();
+  }, 100);
+}
+
+function closeHodAdminChat() {
+  if (hodSocket) {
+    hodSocket.emit('leave_admin_hod', { hod_id: currentHodId });
+  }
+  document.getElementById('hodAdminChatModal').style.display = 'none';
+}
+
+function renderHodAdminMessages(messages) {
+  const container = document.getElementById('hodAdminMessagesContainer');
+  if (!messages || messages.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">✨ No messages yet. Send a direct message to Central Admin!</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  messages.forEach(m => appendHodAdminMessage(m, false));
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendHodAdminMessage(msg, scroll = true) {
+  const container = document.getElementById('hodAdminMessagesContainer');
+  if (container.children.length === 1 && container.children[0].textContent.includes('No messages yet')) {
+    container.innerHTML = '';
+  }
+
+  const isMe = msg.is_me !== undefined ? msg.is_me : (msg.sender_id === currentHodId);
+  const msgEl = document.createElement('div');
+  msgEl.style.display = 'flex';
+  msgEl.style.flexDirection = 'column';
+  msgEl.style.alignItems = isMe ? 'flex-end' : 'flex-start';
+  msgEl.style.marginBottom = '0.5rem';
+
+  msgEl.innerHTML = `
+    <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 2px;">
+      ${isMe ? 'You (HOD)' : msg.sender_name + ' (Central Admin)'}
+    </div>
+    <div style="max-width: 80%; padding: 0.65rem 0.95rem; border-radius: 12px; font-size: 0.88rem; line-height: 1.4; ${isMe ? 'background: var(--primary); color: #ffffff; border-bottom-right-radius: 2px;' : 'background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'}">
+      ${escapeHtml(msg.message)}
+    </div>
+    <div style="font-size: 0.68rem; color: #94a3b8; margin-top: 2px;">
+      ${msg.timeago || 'Just now'}
+    </div>
+  `;
+
+  container.appendChild(msgEl);
+  if (scroll) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function sendHodAdminMessage(e) {
+  e.preventDefault();
+  const input = document.getElementById('hodAdminChatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+
+  fetch(`/api/admin-hod-messages/${currentHodId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === 'success') {
+      appendHodAdminMessage({
+        message: text,
+        sender_id: currentHodId,
+        is_me: true,
+        timeago: 'Just now'
+      });
+    }
+  })
+  .catch(err => {
+    alert('Failed to send message.');
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+</script>
+{% endif %}
 {% endblock %}
+

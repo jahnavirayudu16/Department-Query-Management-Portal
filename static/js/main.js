@@ -8,9 +8,134 @@ document.addEventListener('DOMContentLoaded', () => {
   initSocketGlobal();
   initCounterAnimations();
   initInteractiveElevations();
+  initPushNotificationPermission();
 });
 
-/* Left Sidebar Open / Close Toggle Controller */
+/* Browser Web Push Notification Permission Handler */
+function initPushNotificationPermission() {
+  const banner = document.getElementById('pushNotificationBanner');
+  const btnAllow = document.getElementById('btnAllowPush');
+  const btnDeny = document.getElementById('btnDenyPush');
+
+  if (!banner || !('Notification' in window)) return;
+
+  // Show banner if permission is default and user has not dismissed in this session
+  if (Notification.permission === 'default' && !sessionStorage.getItem('dqm_push_prompt_dismissed')) {
+    banner.style.display = 'flex';
+  }
+
+  if (btnAllow) {
+    btnAllow.addEventListener('click', () => {
+      Notification.requestPermission().then(permission => {
+        banner.style.display = 'none';
+        if (permission === 'granted') {
+          showToastAlert('✅ Push Notifications enabled! You will receive live alerts.', 'info');
+          triggerNativeNotification('🔔 Real-Time Alerts Activated', 'You will receive instant browser alerts for query replies and status updates.');
+        } else {
+          sessionStorage.setItem('dqm_push_prompt_dismissed', 'true');
+        }
+      });
+    });
+  }
+
+  if (btnDeny) {
+    btnDeny.addEventListener('click', () => {
+      banner.style.display = 'none';
+      sessionStorage.setItem('dqm_push_prompt_dismissed', 'true');
+    });
+  }
+}
+
+/* Global Native Browser Notification Trigger */
+function triggerNativeNotification(title, body, url = window.location.href) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  try {
+    const notif = new Notification(title, {
+      body: body,
+      icon: '/static/img/icon.png', // optional icon
+      badge: '/static/img/icon.png',
+      tag: 'dqm-notification',
+      vibrate: [200, 100, 200]
+    });
+
+    notif.onclick = function() {
+      window.focus();
+      if (url && url !== window.location.href) {
+        window.location.href = url;
+      }
+      notif.close();
+    };
+  } catch (e) {
+    console.log('Push notification display bypassed:', e);
+  }
+}
+
+/* Global SocketIO Notifications for Department Staff & Online Presence */
+function initSocketGlobal() {
+  if (typeof io === 'undefined') return;
+
+  const socket = io();
+  const userRole = document.body.dataset.userRole;
+  const userDept = document.body.dataset.userDept;
+  const userId = document.body.dataset.userId;
+
+  // Emit heartbeat presence if logged in
+  if (userId) {
+    socket.emit('user_presence_connect', { user_id: parseInt(userId) });
+  }
+
+  // If department staff, faculty or admin, join department room
+  if ((userRole === 'staff' || userRole === 'admin' || userRole === 'faculty') && userDept) {
+    socket.emit('join_department', { department: userDept });
+
+    socket.on('new_query_alert', (data) => {
+      showToastAlert(`🔴 New ${data.priority} Query: "${data.title}" by ${data.user_name}`, data.priority === 'Urgent' ? 'urgent' : 'info');
+      triggerNativeNotification(`🔴 New ${data.priority} Query (${data.department})`, `${data.title} by ${data.user_name}`);
+      
+      // Update new query badge if on department dashboard
+      const newQueryBadge = document.getElementById('statNewQueries');
+      if (newQueryBadge) {
+        let count = parseInt(newQueryBadge.textContent) || 0;
+        newQueryBadge.textContent = count + 1;
+      }
+    });
+  }
+}
+
+/* Toast Alert Notification System */
+function showToastAlert(message, type = 'info') {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.position = 'fixed';
+    container.style.top = '20px';
+    container.style.right = '20px';
+    container.style.zIndex = '9999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '10px';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `alert alert-${type === 'urgent' ? 'danger' : 'info'}`;
+  toast.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.15)';
+  toast.style.minWidth = '280px';
+  toast.style.maxWidth = '400px';
+  toast.style.animation = 'fadeInUp 0.3s ease-out';
+  toast.innerHTML = `<strong>Alert:</strong> ${message}`;
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    toast.style.transition = 'all 0.3s ease-out';
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
+}
 function initSidebarToggle() {
   const sidebar = document.getElementById('appSidebar');
   const toggleBtn = document.getElementById('sidebarToggle');
@@ -208,61 +333,4 @@ function initClassifierPreview() {
   descInput.addEventListener('input', updatePreview);
 }
 
-/* Global SocketIO Notifications for Department Staff */
-function initSocketGlobal() {
-  if (typeof io === 'undefined') return;
 
-  const socket = io();
-  const userRole = document.body.dataset.userRole;
-  const userDept = document.body.dataset.userDept;
-
-  // If department staff or admin, join department room
-  if ((userRole === 'staff' || userRole === 'admin') && userDept) {
-    socket.emit('join_department', { department: userDept });
-
-    socket.on('new_query_alert', (data) => {
-      showToastAlert(`🔴 New ${data.priority} Query: "${data.title}" by ${data.user_name}`, data.priority === 'Urgent' ? 'urgent' : 'info');
-      
-      // Update new query badge if on department dashboard
-      const newQueryBadge = document.getElementById('statNewQueries');
-      if (newQueryBadge) {
-        let count = parseInt(newQueryBadge.textContent) || 0;
-        newQueryBadge.textContent = count + 1;
-      }
-    });
-  }
-}
-
-/* Toast Alert Notification System */
-function showToastAlert(message, type = 'info') {
-  let container = document.getElementById('toastContainer');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'toastContainer';
-    container.style.position = 'fixed';
-    container.style.top = '20px';
-    container.style.right = '20px';
-    container.style.zIndex = '9999';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.gap = '10px';
-    document.body.appendChild(container);
-  }
-
-  const toast = document.createElement('div');
-  toast.className = `alert alert-${type === 'urgent' ? 'danger' : 'info'}`;
-  toast.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.15)';
-  toast.style.minWidth = '280px';
-  toast.style.maxWidth = '400px';
-  toast.style.animation = 'fadeInUp 0.3s ease-out';
-  toast.innerHTML = `<strong>Alert:</strong> ${message}`;
-
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateX(20px)';
-    toast.style.transition = 'all 0.3s ease-out';
-    setTimeout(() => toast.remove(), 300);
-  }, 5000);
-}

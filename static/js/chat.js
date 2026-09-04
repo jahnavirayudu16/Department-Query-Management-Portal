@@ -26,6 +26,34 @@ document.addEventListener('DOMContentLoaded', () => {
   socket.on('chat_message', (msg) => {
     appendMessage(msg, currentUserId);
     scrollToBottom();
+
+    // If message is from the other person, trigger native notification
+    if (msg.sender_id !== currentUserId && typeof triggerNativeNotification === 'function') {
+      triggerNativeNotification(`💬 Message on Query #${queryId}`, `${msg.sender_name}: ${msg.message}`);
+    }
+  });
+
+  // Listen for live user presence updates (Online / Offline status)
+  socket.on('presence_update', (data) => {
+    if (!data || !data.user_id) return;
+
+    // Update any presence dots for this user
+    const dots = document.querySelectorAll(`.user-presence-dot[data-user-id="${data.user_id}"]`);
+    dots.forEach(dot => {
+      dot.style.background = data.is_online ? '#16a34a' : '#94a3b8';
+    });
+
+    // Update any presence text labels for this user
+    const textEls = document.querySelectorAll(`.user-presence-text[data-user-id="${data.user_id}"]`);
+    textEls.forEach(el => {
+      if (data.is_online) {
+        el.textContent = '🟢 Online Now';
+        el.style.color = '#16a34a';
+      } else {
+        el.textContent = data.last_active || 'Just now';
+        el.style.color = '#64748b';
+      }
+    });
   });
 
   // Listen for live status changes
@@ -34,6 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (statusBadge) {
       statusBadge.textContent = data.status;
       statusBadge.className = `badge badge-status-${data.status.toLowerCase().replace(/ /g, '-')}`;
+    }
+    if (typeof triggerNativeNotification === 'function') {
+      triggerNativeNotification(`⚙️ Query #${queryId} Status Updated`, `Status changed to: ${data.status}`);
     }
   });
 
@@ -96,11 +127,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const bubble = document.createElement('div');
     bubble.className = `message-bubble ${isMe ? 'sent' : 'received'} ${msg.is_internal_note ? 'internal-note' : ''}`;
 
-    let roleBadge = `<span class="badge badge-sm badge-status-assigned">${msg.sender_role.toUpperCase()}</span>`;
+    let roleBadge = `<span class="badge badge-sm badge-status-assigned">${(msg.sender_role || 'STAFF').toUpperCase()}</span>`;
     if (msg.sender_role === 'student') {
       roleBadge = `<span class="badge badge-sm badge-low">STUDENT</span>`;
     } else if (msg.sender_role === 'faculty') {
       roleBadge = `<span class="badge badge-sm badge-medium">FACULTY</span>`;
+    } else if (msg.sender_role === 'hod') {
+      roleBadge = `<span class="badge badge-sm badge-urgent">HOD</span>`;
     }
 
     let attachmentHtml = '';

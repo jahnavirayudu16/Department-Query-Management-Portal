@@ -1,9 +1,13 @@
 {% extends 'base.html' %}
 
-{% block page_title %}Central Administration Cockpit{% endblock %}
+{% block page_title %}Central Administration Cockpit & Visual Analytics{% endblock %}
+
+{% block extra_head %}
+<script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
+{% endblock %}
 
 {% block content %}
-<div style="max-width: 1260px; margin: 0 auto;">
+<div style="max-width: 1280px; margin: 0 auto;" id="analyticsDashboard">
 
   <!-- Hero Header -->
   <div class="hero-card" style="padding: 1.75rem 2.25rem; margin-bottom: 2rem; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);">
@@ -12,24 +16,24 @@
         <span class="badge badge-status-waiting" style="background: rgba(255,255,255,0.2); color: #fff; border: none; margin-bottom: 0.35rem;">
           ⚡ Central Administration Cockpit
         </span>
-        <h1 style="font-size: 1.8rem; margin-bottom: 0.25rem; color: #ffffff;">Central Admin Control Panel</h1>
+        <h1 style="font-size: 1.85rem; margin-bottom: 0.25rem; color: #ffffff;">Central Admin Control & Analytics Panel</h1>
         <p style="font-size: 0.88rem; color: #c7d2fe; margin: 0;">
-          Manage staff assignments, set query priorities, re-route departments, and monitor all campus queries across the 3 categories.
+          Monitor campus-wide query analytics across departments and academic years, coordinate directly with Branch HODs, and oversee department wings.
         </p>
       </div>
 
-      <div style="display: flex; gap: 0.5rem;">
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
         <a href="{{ url_for('admin_users') }}" class="btn btn-secondary btn-sm" style="background: #ffffff; color: #1e1b4b; font-weight: 700;">
           👥 Users Directory
         </a>
         <a href="{{ url_for('admin_analytics') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.15); color: #ffffff; border-color: rgba(255,255,255,0.3); font-weight: 700;">
-          📈 Analytics Charts
+          📈 Full Analytics & Cross-Matrix
         </a>
       </div>
     </div>
   </div>
 
-  <!-- Key Statistics Summary -->
+  <!-- Key Statistics Summary Tiles -->
   <div class="stats-grid" style="margin-bottom: 2rem;">
     <div class="stat-card">
       <div class="stat-icon primary">👥</div>
@@ -37,7 +41,7 @@
         <h3 class="counter" data-target="{{ stats.total_users }}">{{ stats.total_users }}</h3>
         <p>Total Registered Users</p>
         <div style="font-size: 0.72rem; color: var(--text-light); margin-top: 3px; font-weight: 600;">
-          {{ stats.students }} Stu • {{ stats.faculty }} Fac • {{ stats.staff }} Staff
+          {{ stats.students }} Students • {{ stats.faculty }} Faculty • {{ stats.staff }} Staff
         </div>
       </div>
     </div>
@@ -59,7 +63,7 @@
       <div class="stat-icon danger">🚨</div>
       <div class="stat-info">
         <h3>{{ stats.urgent_queries }}</h3>
-        <p>Urgent Cases</p>
+        <p>Urgent Priority</p>
       </div>
     </div>
     <div class="stat-card">
@@ -71,7 +75,218 @@
     </div>
   </div>
 
-  <!-- PROMINENT LARGE 3 CATEGORY CARDS (Academics, Administrative, Others) -->
+  <!-- Real-time Summary Insights Badges -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="border-left: 5px solid #4f46e5; padding: 1.25rem;">
+      <div style="font-size: 0.76rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">
+        🏢 #1 Most Reported Department:
+      </div>
+      <div id="topDeptBadge" style="font-size: 1.05rem; font-weight: 800; color: #1e1b4b;">
+        Calculating...
+      </div>
+      <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px;">
+        Highest percentage of raised complaints
+      </div>
+    </div>
+
+    <div class="card" style="border-left: 5px solid #0284c7; padding: 1.25rem;">
+      <div style="font-size: 0.76rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">
+        🎓 #1 Most Impacted Student Year:
+      </div>
+      <div id="topYearBadge" style="font-size: 1.05rem; font-weight: 800; color: #0369a1;">
+        Calculating...
+      </div>
+      <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px;">
+        Academic year with highest problem volume
+      </div>
+    </div>
+
+    <div class="card" style="border-left: 5px solid #10b981; padding: 1.25rem;">
+      <div style="font-size: 0.76rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">
+        ⚡ Total Campus Queries Processed:
+      </div>
+      <div id="totalQueriesBadge" style="font-size: 1.05rem; font-weight: 800; color: #065f46;">
+        Calculating...
+      </div>
+      <div style="font-size: 0.74rem; color: #64748b; margin-top: 4px;">
+        Real-time database records
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 CORE VISUAL PIE CHARTS SECTION -->
+  <div style="margin-bottom: 2.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+      <div>
+        <h2 style="font-size: 1.4rem; font-weight: 800; color: #0f172a; margin: 0;">
+          📊 Campus Query Visual Analytics (Pie Charts)
+        </h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+          Live distribution charts tracking origin of issues across departments, branches, and student study years.
+        </p>
+      </div>
+      <a href="{{ url_for('admin_analytics') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
+        Detailed Cross-Matrix & SLA Reports →
+      </a>
+    </div>
+
+    <!-- 2 Primary Large Pie Charts -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.75rem; margin-bottom: 1.75rem;">
+      
+      <!-- 1. Department / Branch Pie Chart -->
+      <div class="card" style="border-top: 5px solid #4f46e5; padding: 1.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin: 0;">
+            🥧 1. Queries by Department / Branch
+          </h3>
+        </div>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Visual breakdown of which branch/department (CSE, ECE, ME, Civil, AIDS, AIML, MBA, MCA, BCA, Diploma) has raised the most issues.
+        </p>
+        <div style="height: 310px; position: relative;">
+          <canvas id="deptPieChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 2. Academic Year Pie Chart -->
+      <div class="card" style="border-top: 5px solid #0284c7; padding: 1.75rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin: 0;">
+            🥧 2. Queries by Student Year of Study
+          </h3>
+        </div>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+          Visual breakdown showing which academic year (1st, 2nd, 3rd, 4th Year, PG, Faculty) generates the highest complaint volume.
+        </p>
+        <div style="height: 310px; position: relative;">
+          <canvas id="yearPieChart"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Secondary Charts Row: Category, Status, Priority -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+      <!-- 3. Category Wing Pie Chart -->
+      <div class="card" style="border-top: 4px solid #f59e0b; padding: 1.5rem;">
+        <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.35rem; color: var(--text-main);">
+          🥧 3. Category Wing Distribution
+        </h3>
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Academics vs Administrative vs Others
+        </p>
+        <div style="height: 230px; position: relative;">
+          <canvas id="catChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Status Breakdown -->
+      <div class="card" style="border-top: 4px solid #10b981; padding: 1.5rem;">
+        <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.35rem; color: var(--text-main);">
+          ✅ Resolution Status Lifecycle
+        </h3>
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Resolved vs In Progress vs Assigned vs New
+        </p>
+        <div style="height: 230px; position: relative;">
+          <canvas id="statusChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Priority Breakdown -->
+      <div class="card" style="border-top: 4px solid #ef4444; padding: 1.5rem;">
+        <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.35rem; color: var(--text-main);">
+          🚨 Priority & Urgency Levels
+        </h3>
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Urgent vs High vs Medium vs Low
+        </p>
+        <div style="height: 230px; position: relative;">
+          <canvas id="priorityChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOD DIRECT ADMINISTRATION & LIVE CHAT DESK -->
+  <div class="card" style="padding: 1.75rem; margin-bottom: 2.5rem; border-top: 5px solid #8b5cf6;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+      <div>
+        <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0;">
+          🎓 Branch HODs Coordination Desk
+        </h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+          Communicate directly with Branch Heads of Department (HODs) in real-time, view their active status, and monitor branch query resolution.
+        </p>
+      </div>
+      <span class="badge badge-status-assigned" style="font-size: 0.82rem; padding: 4px 10px;">
+        {{ hod_list | length }} Department HODs Connected
+      </span>
+    </div>
+
+    {% if hod_list %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem;">
+      {% for hod in hod_list %}
+      <div class="card" style="border: 1px solid #e2e8f0; background: #f8fafc; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; border-radius: var(--radius-md);">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <div style="width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem;">
+                {{ hod.name[:1] }}
+              </div>
+              <div>
+                <h4 style="font-size: 1rem; font-weight: 800; color: #0f172a; margin: 0;">
+                  {{ hod.name }}
+                </h4>
+                <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">
+                  {{ hod.designation or 'Head of Department' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Presence Indicator -->
+            <span class="user-presence-badge" data-user-id="{{ hod.id }}" style="font-size: 0.72rem; font-weight: 700; padding: 2px 7px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 4px; background: #f1f5f9; color: #64748b;">
+              <span class="presence-dot" style="width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; display: inline-block;"></span>
+              <span class="presence-text">{{ hod.last_active_at | timeago if hod.last_active_at else 'Offline' }}</span>
+            </span>
+          </div>
+
+          <div style="margin-bottom: 1rem;">
+            <span class="badge badge-status-assigned" style="font-size: 0.76rem; font-weight: 700; margin-bottom: 0.5rem; display: inline-block;">
+              🏢 {{ hod.department }}
+            </span>
+            <div style="font-size: 0.8rem; color: #475569;">
+              📧 {{ hod.email }}
+            </div>
+          </div>
+
+          <!-- Workload snapshot -->
+          <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.6rem; text-align: center;">
+            <div style="flex: 1;">
+              <div style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">{{ hod.query_count }}</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Total Queries</div>
+            </div>
+            <div style="flex: 1; border-left: 1px solid #e2e8f0;">
+              <div style="font-size: 1.1rem; font-weight: 800; color: #d97706;">{{ hod.unresolved_count }}</div>
+              <div style="font-size: 0.7rem; color: #d97706; font-weight: 700; text-transform: uppercase;">Pending</div>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" onclick="openAdminHodChat({{ hod.id }}, '{{ hod.name | escape }}', '{{ hod.department | escape }}')" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; font-weight: 700;">
+          💬 Chat with {{ hod.name.split()[0] }} →
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+      No HOD accounts registered yet.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- PROMINENT 3 CATEGORY WINGS OVERVIEW -->
   <div style="margin-bottom: 2.25rem;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
       <div>
@@ -79,7 +294,7 @@
           🏢 Core Category Desks
         </h2>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
-          Workload, pending problems, and staff allocation across the 3 wings
+          Overview of the 3 major wings: Academics, Administrative, and Others
         </p>
       </div>
       <a href="{{ url_for('admin_departments') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
@@ -137,254 +352,187 @@
     </div>
   </div>
 
-  <!-- PROBLEMS MANAGEMENT SECTION: Unresolved, Recently Added, All Problems -->
-  <div class="card" style="padding: 1.5rem;">
-    
-    <!-- Tab Navigation Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
-      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-        <button id="tabBtnUnresolved" onclick="showAdminTab('unresolved')" class="btn btn-sm" style="font-weight: 800; background: var(--primary); color: #fff; border: none; padding: 0.5rem 1rem;">
-          ⏳ Unresolved Problems ({{ unresolved_queries | length }})
-        </button>
-        <button id="tabBtnRecent" onclick="showAdminTab('recent')" class="btn btn-sm" style="font-weight: 800; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 0.5rem 1rem;">
-          🆕 Recently Added ({{ recent_queries | length }})
-        </button>
-        <button id="tabBtnAll" onclick="showAdminTab('all')" class="btn btn-sm" style="font-weight: 800; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 0.5rem 1rem;">
-          📋 All Problems ({{ all_queries | length }})
-        </button>
-      </div>
-
-      <div style="font-size: 0.82rem; color: var(--text-muted);">
-        Click <strong>Review & Assign Staff</strong> to assign department personnel
-      </div>
-    </div>
-
-    <!-- 1. UNRESOLVED PROBLEMS TAB -->
-    <div id="tabContentUnresolved" class="admin-tab-content">
-      {% if unresolved_queries %}
-      <div class="table-container">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Priority</th>
-              <th>Problem Title</th>
-              <th>Category / Wing</th>
-              <th>Submitter</th>
-              <th>Assigned Staff</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for q in unresolved_queries %}
-            <tr {% if q.priority == 'Urgent' %}style="background-color: #fff1f2;"{% endif %}>
-              <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
-              <td>
-                <span class="badge badge-{{ q.priority | lower }}">
-                  {% if q.priority == 'Urgent' %}🚨{% endif %} {{ q.priority }}
-                </span>
-              </td>
-              <td>
-                <a href="{{ url_for('query_details', query_id=q.id) }}" style="font-weight: 700; color: #0f172a;">
-                  {{ q.title }}
-                </a>
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
-                  Filed {{ q.created_at | timeago }}
-                </div>
-              </td>
-              <td>
-                <span class="badge badge-status-assigned">🏢 {{ q.department }}</span>
-              </td>
-              <td>
-                <div style="font-weight: 700;">
-                  {% if q.user_role == 'student' %}👨‍🎓 Student
-                  {% elif q.user_role == 'faculty' %}👩‍🏫 Faculty
-                  {% else %}👤 {{ q.user_role | capitalize }}{% endif %}
-                </div>
-                <span style="font-size: 0.72rem; color: var(--text-muted);">Protected Submitter</span>
-              </td>
-              <td>
-                {% if q.staff_name %}
-                  <strong style="color: var(--primary); font-size: 0.85rem;">👤 {{ q.staff_name }}</strong>
-                {% else %}
-                  <span class="badge badge-urgent" style="font-size: 0.72rem;">⚠️ Unassigned</span>
-                {% endif %}
-              </td>
-              <td>
-                <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
-              </td>
-              <td>
-                <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-primary btn-sm" style="font-weight: 700; white-space: nowrap;">
-                  Review & Assign Staff →
-                </a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
-        ✨ Fantastic! There are no unresolved queries pending right now.
-      </div>
-      {% endif %}
-    </div>
-
-    <!-- 2. RECENTLY ADDED PROBLEMS TAB -->
-    <div id="tabContentRecent" class="admin-tab-content" style="display: none;">
-      {% if recent_queries %}
-      <div class="table-container">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Priority</th>
-              <th>Problem Title</th>
-              <th>Category / Wing</th>
-              <th>Submitter</th>
-              <th>Assigned Staff</th>
-              <th>Status</th>
-              <th>Date Filed</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for q in recent_queries %}
-            <tr>
-              <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
-              <td>
-                <span class="badge badge-{{ q.priority | lower }}">{{ q.priority }}</span>
-              </td>
-              <td>
-                <a href="{{ url_for('query_details', query_id=q.id) }}" style="font-weight: 700; color: #0f172a;">
-                  {{ q.title }}
-                </a>
-              </td>
-              <td>
-                <span class="badge badge-status-assigned">🏢 {{ q.department }}</span>
-              </td>
-              <td>
-                <div style="font-weight: 700;">
-                  {% if q.user_role == 'student' %}👨‍🎓 Student
-                  {% elif q.user_role == 'faculty' %}👩‍🏫 Faculty
-                  {% else %}👤 {{ q.user_role | capitalize }}{% endif %}
-                </div>
-              </td>
-              <td>
-                {% if q.staff_name %}
-                  <span style="color: var(--primary); font-weight: 600;">👤 {{ q.staff_name }}</span>
-                {% else %}
-                  <span class="badge badge-urgent" style="font-size: 0.72rem;">⚠️ Unassigned</span>
-                {% endif %}
-              </td>
-              <td>
-                <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
-              </td>
-              <td style="font-size: 0.8rem; color: var(--text-muted);">
-                {{ q.created_at | timeago }}
-              </td>
-              <td>
-                <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-secondary btn-sm" style="font-weight: 700; white-space: nowrap;">
-                  Review & Assign →
-                </a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
-        No recently added queries found.
-      </div>
-      {% endif %}
-    </div>
-
-    <!-- 3. ALL PROBLEMS TAB -->
-    <div id="tabContentAll" class="admin-tab-content" style="display: none;">
-      {% if all_queries %}
-      <div class="table-container">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Priority</th>
-              <th>Problem Title</th>
-              <th>Category</th>
-              <th>Submitter</th>
-              <th>Assigned Staff</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for q in all_queries %}
-            <tr>
-              <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
-              <td>
-                <span class="badge badge-{{ q.priority | lower }}">{{ q.priority }}</span>
-              </td>
-              <td>
-                <a href="{{ url_for('query_details', query_id=q.id) }}" style="font-weight: 700; color: #0f172a;">
-                  {{ q.title }}
-                </a>
-              </td>
-              <td>
-                <span class="badge badge-status-assigned">🏢 {{ q.department }}</span>
-              </td>
-              <td>
-                <span style="font-weight: 600;">{{ q.user_role | capitalize }}</span>
-              </td>
-              <td>
-                {% if q.staff_name %}
-                  <span style="color: var(--primary); font-weight: 600;">👤 {{ q.staff_name }}</span>
-                {% else %}
-                  <span style="color: var(--warning); font-size: 0.8rem;">Unassigned</span>
-                {% endif %}
-              </td>
-              <td>
-                <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
-              </td>
-              <td>
-                <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-secondary btn-sm" style="font-weight: 700; white-space: nowrap;">
-                  Details →
-                </a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
-        No queries available.
-      </div>
-      {% endif %}
-    </div>
-
-  </div>
-
 </div>
 
+<!-- ADMIN <-> HOD DIRECT MESSAGING DRAWER / MODAL -->
+<div id="adminHodChatModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 9999; backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 1rem;">
+  <div style="background: #ffffff; width: 100%; max-width: 580px; height: 600px; border-radius: var(--radius-lg); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden; animation: modalFadeIn 0.2s ease-out;">
+    
+    <!-- Modal Header -->
+    <div style="padding: 1rem 1.25rem; background: linear-gradient(135deg, #1e1b4b, #4338ca); color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="width: 38px; height: 38px; border-radius: 50%; background: #ffffff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 800;" id="modalHodAvatar">
+          H
+        </div>
+        <div>
+          <h4 style="font-size: 1.05rem; font-weight: 800; margin: 0; color: #ffffff;" id="modalHodName">
+            HOD Direct Desk
+          </h4>
+          <div style="font-size: 0.75rem; color: #c7d2fe;" id="modalHodDept">
+            Department Branch
+          </div>
+        </div>
+      </div>
+
+      <button type="button" onclick="closeAdminHodChat()" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center;">
+        ✕
+      </button>
+    </div>
+
+    <!-- Messages Body -->
+    <div id="adminHodMessagesContainer" style="flex: 1; padding: 1rem; overflow-y: auto; background: #f8fafc; display: flex; flex-direction: column; gap: 0.75rem;">
+      <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">
+        Loading message history...
+      </div>
+    </div>
+
+    <!-- Input Footer -->
+    <form id="adminHodChatForm" onsubmit="sendAdminHodMessage(event)" style="padding: 0.75rem 1rem; background: #ffffff; border-top: 1px solid #e2e8f0; display: flex; gap: 0.5rem;">
+      <input type="text" id="adminHodChatInput" class="form-control" placeholder="Type a direct message to HOD..." required style="flex: 1;">
+      <button type="submit" class="btn btn-primary" style="font-weight: 700; padding: 0 1.25rem;">
+        Send 🚀
+      </button>
+    </form>
+  </div>
+</div>
+
+<style>
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+</style>
+
 <script>
-function showAdminTab(tabKey) {
-  const tabs = ['unresolved', 'recent', 'all'];
-  tabs.forEach(t => {
-    const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
-    const content = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
-    if (t === tabKey) {
-      btn.style.background = 'var(--primary)';
-      btn.style.color = '#ffffff';
-      btn.style.border = 'none';
-      content.style.display = 'block';
-    } else {
-      btn.style.background = '#f1f5f9';
-      btn.style.color = '#334155';
-      btn.style.border = '1px solid #cbd5e1';
-      content.style.display = 'none';
+let currentActiveHodId = null;
+let activeSocket = null;
+
+function openAdminHodChat(hodId, hodName, hodDept) {
+  currentActiveHodId = hodId;
+  document.getElementById('modalHodName').textContent = hodName;
+  document.getElementById('modalHodDept').textContent = hodDept;
+  document.getElementById('modalHodAvatar').textContent = hodName.charAt(0);
+  
+  const modal = document.getElementById('adminHodChatModal');
+  modal.style.display = 'flex';
+
+  const container = document.getElementById('adminHodMessagesContainer');
+  container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">⏳ Loading message history...</div>';
+
+  // Fetch past messages
+  fetch(`/api/admin-hod-messages/${hodId}`)
+    .then(res => res.json())
+    .then(data => {
+      renderAdminHodMessages(data.messages || []);
+    })
+    .catch(err => {
+      container.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 1rem;">Failed to load messages.</div>';
+    });
+
+  // Setup SocketIO
+  if (typeof io !== 'undefined') {
+    if (!activeSocket) {
+      activeSocket = io();
+      activeSocket.on('admin_hod_chat', function(msg) {
+        appendAdminHodMessage(msg);
+      });
     }
+    activeSocket.emit('join_admin_hod', { hod_id: hodId });
+  }
+
+  setTimeout(() => {
+    document.getElementById('adminHodChatInput').focus();
+  }, 100);
+}
+
+function closeAdminHodChat() {
+  if (currentActiveHodId && activeSocket) {
+    activeSocket.emit('leave_admin_hod', { hod_id: currentActiveHodId });
+  }
+  document.getElementById('adminHodChatModal').style.display = 'none';
+  currentActiveHodId = null;
+}
+
+function renderAdminHodMessages(messages) {
+  const container = document.getElementById('adminHodMessagesContainer');
+  if (!messages || messages.length === 0) {
+    container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">✨ No messages yet. Start the conversation with HOD!</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  messages.forEach(m => appendAdminHodMessage(m, false));
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendAdminHodMessage(msg, scroll = true) {
+  const container = document.getElementById('adminHodMessagesContainer');
+  
+  // Check if placeholder is present
+  if (container.children.length === 1 && container.children[0].textContent.includes('No messages yet')) {
+    container.innerHTML = '';
+  }
+
+  const isMe = msg.is_me !== undefined ? msg.is_me : (msg.sender_role === 'admin');
+  const msgEl = document.createElement('div');
+  msgEl.style.display = 'flex';
+  msgEl.style.flexDirection = 'column';
+  msgEl.style.alignItems = isMe ? 'flex-end' : 'flex-start';
+  msgEl.style.marginBottom = '0.5rem';
+
+  msgEl.innerHTML = `
+    <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 2px;">
+      ${isMe ? 'Central Admin (You)' : msg.sender_name}
+    </div>
+    <div style="max-width: 80%; padding: 0.65rem 0.95rem; border-radius: 12px; font-size: 0.88rem; line-height: 1.4; ${isMe ? 'background: var(--primary); color: #ffffff; border-bottom-right-radius: 2px;' : 'background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'}">
+      ${escapeHtml(msg.message)}
+    </div>
+    <div style="font-size: 0.68rem; color: #94a3b8; margin-top: 2px;">
+      ${msg.timeago || 'Just now'}
+    </div>
+  `;
+
+  container.appendChild(msgEl);
+  if (scroll) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function sendAdminHodMessage(e) {
+  e.preventDefault();
+  if (!currentActiveHodId) return;
+
+  const input = document.getElementById('adminHodChatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+
+  fetch(`/api/admin-hod-messages/${currentActiveHodId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === 'success') {
+      appendAdminHodMessage({
+        message: text,
+        sender_role: 'admin',
+        is_me: true,
+        timeago: 'Just now'
+      });
+    }
+  })
+  .catch(err => {
+    alert('Failed to send message.');
   });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 </script>
 {% endblock %}
+
