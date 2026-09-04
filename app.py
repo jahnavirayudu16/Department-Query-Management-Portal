@@ -221,7 +221,6 @@ def login():
         return redirect(url_for('dashboard'))
         
     db = get_db()
-    ensure_demo_accounts(db)
         
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
