@@ -460,12 +460,18 @@ function renderAdminHodMessages(messages) {
     return;
   }
 
+  seenAdminHodModalMsgIds.clear();
   container.innerHTML = '';
   messages.forEach(m => appendAdminHodMessage(m, false));
   container.scrollTop = container.scrollHeight;
 }
 
+const seenAdminHodModalMsgIds = new Set();
+
 function appendAdminHodMessage(msg, scroll = true) {
+  if (msg.id && seenAdminHodModalMsgIds.has(String(msg.id))) return;
+  if (msg.id) seenAdminHodModalMsgIds.add(String(msg.id));
+
   const container = document.getElementById('adminHodMessagesContainer');
   
   // Check if placeholder is present
@@ -515,13 +521,8 @@ function sendAdminHodMessage(e) {
   })
   .then(res => res.json())
   .then(data => {
-    if (data.status === 'success') {
-      appendAdminHodMessage({
-        message: text,
-        sender_role: 'admin',
-        is_me: true,
-        timeago: 'Just now'
-      });
+    if (data.status === 'success' && data.message) {
+      appendAdminHodMessage(data.message);
     }
   })
   .catch(err => {

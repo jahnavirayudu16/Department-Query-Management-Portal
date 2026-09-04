@@ -335,12 +335,18 @@ function renderHodAdminMessages(messages) {
     return;
   }
 
+  seenDeptHodAdminMsgIds.clear();
   container.innerHTML = '';
   messages.forEach(m => appendHodAdminMessage(m, false));
   container.scrollTop = container.scrollHeight;
 }
 
+const seenDeptHodAdminMsgIds = new Set();
+
 function appendHodAdminMessage(msg, scroll = true) {
+  if (msg.id && seenDeptHodAdminMsgIds.has(String(msg.id))) return;
+  if (msg.id) seenDeptHodAdminMsgIds.add(String(msg.id));
+
   const container = document.getElementById('hodAdminMessagesContainer');
   if (container.children.length === 1 && container.children[0].textContent.includes('No messages yet')) {
     container.innerHTML = '';
@@ -386,13 +392,8 @@ function sendHodAdminMessage(e) {
   })
   .then(res => res.json())
   .then(data => {
-    if (data.status === 'success') {
-      appendHodAdminMessage({
-        message: text,
-        sender_id: currentHodId,
-        is_me: true,
-        timeago: 'Just now'
-      });
+    if (data.status === 'success' && data.message) {
+      appendHodAdminMessage(data.message);
     }
   })
   .catch(err => {

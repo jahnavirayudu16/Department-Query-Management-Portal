@@ -91,8 +91,34 @@ function initSocketGlobal() {
 
   // Emit heartbeat presence if logged in
   if (userId) {
-    socket.emit('user_presence_connect', { user_id: parseInt(userId) });
+    const emitPresence = () => {
+      socket.emit('user_presence_connect', { user_id: parseInt(userId) });
+    };
+
+    socket.on('connect', emitPresence);
+    emitPresence();
+    // Heartbeat every 25 seconds
+    setInterval(emitPresence, 25000);
   }
+
+  // Listen for global presence updates on any page
+  socket.on('presence_update', (data) => {
+    if (!data || !data.user_id) return;
+
+    const badges = document.querySelectorAll(`.user-presence-badge[data-user-id="${data.user_id}"]`);
+    badges.forEach(b => {
+      const textEl = b.querySelector('.presence-text');
+      if (data.is_online) {
+        b.style.background = '#dcfce7';
+        b.style.color = '#15803d';
+        if (textEl) textEl.textContent = '🟢 Online Now';
+      } else {
+        b.style.background = '#f1f5f9';
+        b.style.color = '#64748b';
+        if (textEl) textEl.textContent = data.last_active || 'Offline';
+      }
+    });
+  });
 
   // If department staff, faculty or admin, join department room
   if ((userRole === 'staff' || userRole === 'admin' || userRole === 'faculty') && userDept) {

@@ -106,6 +106,22 @@ def inject_global_context():
         'now': datetime.now()
     }
 
+def format_datetime(dt_val, fmt='%d %b %Y, %I:%M %p'):
+    """Utility to format timestamps as clear readable dates and times (e.g. 04 Sep 2026, 08:30 PM)."""
+    if not dt_val:
+        return 'N/A'
+    try:
+        if isinstance(dt_val, str):
+            clean_str = dt_val.split('.')[0].replace('T', ' ')
+            dt = datetime.strptime(clean_str, '%Y-%m-%d %H:%M:%S')
+        else:
+            dt = dt_val
+        return dt.strftime(fmt)
+    except Exception:
+        return str(dt_val)
+
+app.jinja_env.filters['format_datetime'] = format_datetime
+
 def format_time_ago(dt_str):
     """Utility to accurately format timestamps as human-readable relative time strings without timezone offset errors."""
     if not dt_str:
@@ -121,14 +137,11 @@ def format_time_ago(dt_str):
         diff = now - dt
         seconds = diff.total_seconds()
         
-        # Check if timestamp was recorded in UTC while local time is in a different zone (e.g. IST)
-        utc_diff = datetime.utcnow() - dt
-        utc_seconds = utc_diff.total_seconds()
-        
-        if 0 <= utc_seconds < 120 or (0 <= utc_seconds and abs(utc_seconds) < abs(seconds)):
-            seconds = max(0, utc_seconds)
-        else:
-            seconds = max(0, seconds)
+        # Compensate for tiny sub-minute local clock drifts
+        if -60 <= seconds < 0:
+            seconds = 0
+        elif seconds < -60:
+            return dt.strftime('%b %d, %Y')
             
         if seconds < 60:
             return 'Just now'
@@ -174,18 +187,12 @@ def create_notification(user_id, query_id, title, message, notif_type='info'):
         print(f"Notification error bypassed: {e}")
 
 def ensure_demo_accounts(db):
-    """Ensures all 1-click demo accounts exist and can log in without failure."""
+    """Ensures demo accounts strictly for 1 department (CSE) and primary resolvers exist."""
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     demo_accounts = [
         ('Student (CSE 3rd Yr)', 'student@college.com', 'student123', 'student', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', 3, 'Student'),
-        ('Faculty Member', 'faculty@college.com', 'faculty123', 'faculty', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, 'Assistant Professor'),
+        ('Faculty Member (CSE)', 'faculty@college.com', 'faculty123', 'faculty', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, 'Assistant Professor'),
         ('Dr. Grace Hopper (CSE HOD)', 'cse-hod@college.com', 'hod123', 'hod', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, 'Head of Department (CSE)'),
-        ('Prof. Ada Lovelace (ECE HOD)', 'ece-hod@college.com', 'hod123', 'hod', 'UG', 'Electronics & Communication Engineering (ECE)', 'B.Tech', None, 'Head of Department (ECE)'),
-        ('Dr. Nikola Tesla (Mech HOD)', 'mech-hod@college.com', 'hod123', 'hod', 'UG', 'Mechanical Engineering (Mech)', 'B.Tech', None, 'Head of Department (Mechanical)'),
-        ('Prof. Dennis Ritchie (BCA HOD)', 'bca-hod@college.com', 'hod123', 'hod', 'UG', 'Bachelor of Computer Applications (BCA)', 'Degree', None, 'Head of Department (BCA)'),
-        ('Dr. Peter Drucker (MBA HOD)', 'mba-hod@college.com', 'hod123', 'hod', 'PG', 'MBA (Business Analytics)', 'MBA', None, 'Head of Department (MBA)'),
-        ('Dr. Barbara Liskov (MCA HOD)', 'mca-hod@college.com', 'hod123', 'hod', 'PG', 'Master of Computer Applications (MCA - Regular)', 'MCA', None, 'Head of Department (MCA)'),
-        ('Dr. Claude Shannon (M.Tech HOD)', 'mtech-hod@college.com', 'hod123', 'hod', 'PG', 'M.Tech (Computer Science & Engineering)', 'M.Tech', None, 'Head of Department (M.Tech)'),
-        ('Prof. James Gosling (Diploma HOD)', 'diploma-hod@college.com', 'hod123', 'hod', 'Diploma', 'Diploma in Computer Engineering (DCME)', 'Diploma (Polytechnic)', None, 'Head of Department (Diploma)'),
         ('Prof. Linus Torvalds', 'cse-staff@college.com', 'staff123', 'staff', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, 'CSE Department Coordinator'),
         ('Dr. Alan Turing', 'academics-staff@college.com', 'staff123', 'staff', None, 'Academics', None, None, 'Academics Coordinator'),
         ('Mrs. Eleanor Wright', 'admin-staff@college.com', 'staff123', 'staff', None, 'Administrative', None, None, 'Administrative Officer'),
@@ -197,15 +204,31 @@ def ensure_demo_accounts(db):
             existing = db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
             if not existing:
                 db.execute("""
-                    INSERT INTO users (name, email, password_hash, role, level, department, course, year, designation, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                """, (name, email, generate_password_hash(pwd), role, level, dept, course, year, desig))
+                    INSERT INTO users (name, email, password_hash, role, level, department, course, year, designation, is_active, last_active_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """, (name, email, generate_password_hash(pwd), role, level, dept, course, year, desig, now_str))
             else:
                 db.execute("""
                     UPDATE users SET name = ?, password_hash = ?, is_active = 1, role = ?, level = COALESCE(?, level), department = COALESCE(?, department), course = COALESCE(?, course), designation = COALESCE(?, designation) WHERE email = ?
                 """, (name, generate_password_hash(pwd), role, level, dept, course, desig, email))
         except Exception as e:
             print(f"Demo sync notice for {email}: {e}")
+            
+    # Clean up any leftover demo accounts for other departments
+    old_demo_emails = [
+        'ece-hod@college.com', 'mech-hod@college.com', 'bca-hod@college.com',
+        'mba-hod@college.com', 'mca-hod@college.com', 'mtech-hod@college.com',
+        'diploma-hod@college.com', 'student-cse1@college.com', 'student-aiml@college.com',
+        'student-ds@college.com', 'student-ece@college.com', 'student-me@college.com',
+        'student-civil@college.com', 'student-bca@college.com', 'student-mba@college.com',
+        'student-mca@college.com', 'student-diploma@college.com'
+    ]
+    for old_email in old_demo_emails:
+        try:
+            db.execute("DELETE FROM users WHERE email = ?", (old_email,))
+        except Exception:
+            pass
+            
     try:
         db.commit()
     except Exception:
@@ -694,10 +717,35 @@ def query_details(query_id):
                 'last_active': staff_row['last_active_at']
             }
 
-    # 3. Branch HOD Presence & Details
-    hod_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'hod' AND (department = ? OR department IS NULL) LIMIT 1", (query['department'],)).fetchone()
-    if not hod_row:
-        hod_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'hod' LIMIT 1").fetchone()
+    # 3. Branch HOD Presence & Details (Strictly matching registered HOD for this department)
+    hod_row = None
+    target_dept = query['department'] or (sub_row['department'] if sub_row else None)
+    if target_dept:
+        # 1. Exact match by department
+        hod_row = db.execute("""
+            SELECT id, name, email, role, department, designation, last_active_at 
+            FROM users 
+            WHERE role = 'hod' AND department = ?
+            ORDER BY id DESC LIMIT 1
+        """, (target_dept,)).fetchone()
+        
+        # 2. Match by course if submitter belongs to specific academic course
+        if not hod_row and sub_row and sub_row['course']:
+            hod_row = db.execute("""
+                SELECT id, name, email, role, department, designation, last_active_at 
+                FROM users 
+                WHERE role = 'hod' AND course = ?
+                ORDER BY id DESC LIMIT 1
+            """, (sub_row['course'],)).fetchone()
+            
+        # 3. Fuzzy match on branch name
+        if not hod_row and target_dept not in ['Academics', 'Administrative', 'Others']:
+            hod_row = db.execute("""
+                SELECT id, name, email, role, department, designation, last_active_at 
+                FROM users 
+                WHERE role = 'hod' AND (department LIKE ? OR ? LIKE '%' || department || '%')
+                ORDER BY id DESC LIMIT 1
+            """, (f"%{target_dept}%", target_dept)).fetchone()
 
     hod_presence = None
     if hod_row:

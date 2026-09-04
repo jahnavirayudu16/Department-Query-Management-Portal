@@ -123,7 +123,7 @@
         <!-- Chat Stream -->
         <div class="chat-messages" id="chatMessages">
           {% for m in messages %}
-          <div class="message-bubble {% if m.sender_id == current_user.id %}sent{% else %}received{% endif %} {% if m.is_internal_note %}internal-note{% endif %}">
+          <div class="message-bubble {% if m.sender_id == current_user.id %}sent{% else %}received{% endif %} {% if m.is_internal_note %}internal-note{% endif %}" data-msg-id="{{ m.id }}">
             <div class="message-meta">
               <strong>
                 {% if m.sender_role == 'student' %}Student
@@ -247,16 +247,18 @@
       {% endif %}
 
       <!-- Head of Department (HOD) Detailed Profile Card (Unmasked & Visible to all) -->
-      {% if hod_presence %}
       <div class="card" style="background: #ffffff; border: 1px solid var(--border-color); border-top: 3px solid #8b5cf6;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
           <h3 style="font-size: 0.95rem; font-weight: 800; color: #1e1b4b; margin: 0;">
             🎓 Branch Head of Dept (HOD)
           </h3>
+          {% if hod_presence %}
           <span class="user-presence-text" data-user-id="{{ hod_presence.id }}" style="font-size: 0.72rem; font-weight: 700; color: {% if hod_presence.is_online %}#16a34a{% else %}#64748b{% endif %};">
             {% if hod_presence.is_online %}🟢 Online{% else %}⚪ Offline{% endif %}
           </span>
+          {% endif %}
         </div>
+        {% if hod_presence %}
         <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.4rem;">
           <div><strong>HOD Name:</strong> {{ hod_presence.name }}</div>
           <div><strong>Department:</strong> {{ hod_presence.department }}</div>
@@ -265,8 +267,12 @@
           <div><strong>Designation:</strong> {{ hod_presence.designation }}</div>
           {% endif %}
         </div>
+        {% else %}
+        <p style="font-size: 0.85rem; color: #64748b; margin: 0;">
+          ⏳ No HOD registered yet for <strong>{{ query.department }}</strong>.
+        </p>
+        {% endif %}
       </div>
-      {% endif %}
 
       <!-- Assigned Staff Member Detailed Profile Card (Visible to Student, HOD, and Staff) -->
       <div class="card" style="background: #f8fafc; border: 1px solid var(--border-color);">
@@ -336,7 +342,7 @@
 
           <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
             <span style="color: var(--text-muted); display: block; font-size: 0.75rem;">DATE FILED</span>
-            <div><strong>{{ query.created_at }}</strong></div>
+            <div><strong>{{ query.created_at | format_datetime }}</strong> <span style="font-size: 0.8rem; color: var(--text-muted);">({{ query.created_at | timeago }})</span></div>
           </div>
         </div>
       </div>
