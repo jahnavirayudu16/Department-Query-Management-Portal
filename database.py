@@ -12,7 +12,7 @@ def get_db():
         )
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
-        check_and_migrate_db(g.db)
+        #check_and_migrate_db(g.db)
     return g.db
 
 def get_standalone_db():
