@@ -69,7 +69,6 @@ def seed_database(force_reset=True):
             ('Prof. Ada Lovelace (ECE HOD)', 'ece-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Electronics & Communication Engineering (ECE)', 'B.Tech', None, '', '', 'Head of Department (ECE)', 1),
             ('Dr. Nikola Tesla (Mech HOD)', 'mech-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Mechanical Engineering (Mech)', 'B.Tech', None, '', '', 'Head of Department (Mechanical)', 1),
             ('Prof. Dennis Ritchie (BCA HOD)', 'bca-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Bachelor of Computer Applications (BCA)', 'Degree', None, '', '', 'Head of Department (BCA)', 1),
-            ('Dr. Alexander Fleming (Pharmacy HOD)', 'pharm-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Bachelor of Pharmacy (B.Pharm - Core)', 'B.Pharmacy', None, '', '', 'Head of Department (Pharmacy)', 1),
             ('Dr. Peter Drucker (MBA HOD)', 'mba-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'MBA (Business Analytics)', 'MBA', None, '', '', 'Head of Department (MBA)', 1),
             ('Dr. Barbara Liskov (MCA HOD)', 'mca-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'Master of Computer Applications (MCA - Regular)', 'MCA', None, '', '', 'Head of Department (MCA)', 1),
             ('Dr. Claude Shannon (M.Tech HOD)', 'mtech-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'M.Tech (Computer Science & Engineering)', 'M.Tech', None, '', '', 'Head of Department (M.Tech)', 1),

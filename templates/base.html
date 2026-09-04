@@ -29,19 +29,22 @@
     <!-- Left Collapsible Sidebar -->
     <aside class="sidebar" id="appSidebar">
       <div class="sidebar-header">
-        <div class="sidebar-brand-wrapper">
+        <a href="{{ url_for('index') }}" class="sidebar-brand-wrapper" style="text-decoration: none; color: inherit;">
           <div class="sidebar-logo">🎓</div>
           <div class="sidebar-brand">
             <h2>DQM Portal</h2>
             <p>College Query System</p>
           </div>
-        </div>
+        </a>
         <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" title="Close Navigation" aria-label="Close Navigation">
           ✕
         </button>
       </div>
 
       <nav class="sidebar-nav">
+        <a href="{{ url_for('index') }}" class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">
+          <span class="icon">🏠</span> Portal Home
+        </a>
         {% if current_user.role in ['student', 'faculty'] %}
         <div class="nav-section-title">My Workspace (Personal)</div>
         <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">

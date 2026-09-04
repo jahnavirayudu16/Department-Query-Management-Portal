@@ -246,6 +246,28 @@
       </div>
       {% endif %}
 
+      <!-- Head of Department (HOD) Detailed Profile Card (Unmasked & Visible to all) -->
+      {% if hod_presence %}
+      <div class="card" style="background: #ffffff; border: 1px solid var(--border-color); border-top: 3px solid #8b5cf6;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <h3 style="font-size: 0.95rem; font-weight: 800; color: #1e1b4b; margin: 0;">
+            🎓 Branch Head of Dept (HOD)
+          </h3>
+          <span class="user-presence-text" data-user-id="{{ hod_presence.id }}" style="font-size: 0.72rem; font-weight: 700; color: {% if hod_presence.is_online %}#16a34a{% else %}#64748b{% endif %};">
+            {% if hod_presence.is_online %}🟢 Online{% else %}⚪ Offline{% endif %}
+          </span>
+        </div>
+        <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.4rem;">
+          <div><strong>HOD Name:</strong> {{ hod_presence.name }}</div>
+          <div><strong>Department:</strong> {{ hod_presence.department }}</div>
+          <div><strong>Official Email:</strong> {{ hod_presence.email or 'N/A' }}</div>
+          {% if hod_presence.designation %}
+          <div><strong>Designation:</strong> {{ hod_presence.designation }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Assigned Staff Member Detailed Profile Card (Visible to Student, HOD, and Staff) -->
       <div class="card" style="background: #f8fafc; border: 1px solid var(--border-color);">
         <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-main);">

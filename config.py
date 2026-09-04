@@ -24,9 +24,9 @@ class Config:
     
     # Academic Levels & Program Hierarchies
     ACADEMIC_LEVELS = {
-        'UG': ['B.Tech', 'Degree', 'B.Pharmacy'],
-        'PG': ['M.Tech', 'MCA', 'MBA', 'M.Sc', 'M.Pharmacy'],
-        'Diploma': ['Diploma (Polytechnic)', 'D.Pharmacy']
+        'UG': ['B.Tech', 'Degree'],
+        'PG': ['M.Tech', 'MCA', 'MBA', 'M.Sc'],
+        'Diploma': ['Diploma (Polytechnic)']
     }
     
     # Exhaustive Course & Branch / Specialization Mapping
@@ -63,15 +63,6 @@ class Config:
                 'B.Com (Computer Applications)',
                 'Bachelor of Business Administration (BBA)',
                 'B.A (Economics / Literature / History)'
-            ]
-        },
-        'B.Pharmacy': {
-            'level': 'UG',
-            'years': [1, 2, 3, 4],
-            'branches': [
-                'Bachelor of Pharmacy (B.Pharm - Core)',
-                'Pharmaceutical Chemistry',
-                'Pharmacology & Toxicology'
             ]
         },
         'M.Tech': {
@@ -118,15 +109,6 @@ class Config:
                 'M.Sc (Biotechnology)'
             ]
         },
-        'M.Pharmacy': {
-            'level': 'PG',
-            'years': [1, 2],
-            'branches': [
-                'M.Pharm (Pharmaceutics)',
-                'M.Pharm (Pharmacology)',
-                'M.Pharm (Pharmaceutical Analysis)'
-            ]
-        },
         'Diploma (Polytechnic)': {
             'level': 'Diploma',
             'years': [1, 2, 3],
@@ -137,13 +119,6 @@ class Config:
                 'Diploma in Mechanical Engineering (DME)',
                 'Diploma in Civil Engineering (DCE)',
                 'Diploma in Automobile Engineering'
-            ]
-        },
-        'D.Pharmacy': {
-            'level': 'Diploma',
-            'years': [1, 2],
-            'branches': [
-                'Diploma in Pharmacy (D.Pharm - 2 Year Core)'
             ]
         }
     }

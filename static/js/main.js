@@ -17,31 +17,41 @@ function initPushNotificationPermission() {
   const btnAllow = document.getElementById('btnAllowPush');
   const btnDeny = document.getElementById('btnDenyPush');
 
-  if (!banner || !('Notification' in window)) return;
+  if (!banner) return;
 
-  // Show banner if permission is default and user has not dismissed in this session
-  if (Notification.permission === 'default' && !sessionStorage.getItem('dqm_push_prompt_dismissed')) {
-    banner.style.display = 'flex';
+  // Immediately hide if notifications already granted/denied or previously dismissed
+  if (!('Notification' in window) || Notification.permission !== 'default' || localStorage.getItem('dqm_push_prompt_dismissed') === 'true') {
+    banner.style.display = 'none';
+    return;
   }
+
+  // Otherwise show the prompt banner
+  banner.style.display = 'flex';
 
   if (btnAllow) {
     btnAllow.addEventListener('click', () => {
-      Notification.requestPermission().then(permission => {
-        banner.style.display = 'none';
-        if (permission === 'granted') {
-          showToastAlert('✅ Push Notifications enabled! You will receive live alerts.', 'info');
-          triggerNativeNotification('🔔 Real-Time Alerts Activated', 'You will receive instant browser alerts for query replies and status updates.');
-        } else {
-          sessionStorage.setItem('dqm_push_prompt_dismissed', 'true');
-        }
-      });
+      banner.style.display = 'none';
+      localStorage.setItem('dqm_push_prompt_dismissed', 'true');
+      
+      if ('Notification' in window) {
+        Notification.requestPermission().then(permission => {
+          banner.style.display = 'none';
+          localStorage.setItem('dqm_push_prompt_dismissed', 'true');
+          if (permission === 'granted') {
+            showToastAlert('✅ Push Notifications enabled! You will receive live alerts.', 'info');
+            triggerNativeNotification('🔔 Real-Time Alerts Activated', 'You will receive instant browser alerts for query replies and status updates.');
+          }
+        }).catch(() => {
+          banner.style.display = 'none';
+        });
+      }
     });
   }
 
   if (btnDeny) {
     btnDeny.addEventListener('click', () => {
       banner.style.display = 'none';
-      sessionStorage.setItem('dqm_push_prompt_dismissed', 'true');
+      localStorage.setItem('dqm_push_prompt_dismissed', 'true');
     });
   }
 }

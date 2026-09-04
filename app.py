@@ -182,7 +182,6 @@ def ensure_demo_accounts(db):
         ('Prof. Ada Lovelace (ECE HOD)', 'ece-hod@college.com', 'hod123', 'hod', 'UG', 'Electronics & Communication Engineering (ECE)', 'B.Tech', None, 'Head of Department (ECE)'),
         ('Dr. Nikola Tesla (Mech HOD)', 'mech-hod@college.com', 'hod123', 'hod', 'UG', 'Mechanical Engineering (Mech)', 'B.Tech', None, 'Head of Department (Mechanical)'),
         ('Prof. Dennis Ritchie (BCA HOD)', 'bca-hod@college.com', 'hod123', 'hod', 'UG', 'Bachelor of Computer Applications (BCA)', 'Degree', None, 'Head of Department (BCA)'),
-        ('Dr. Alexander Fleming (Pharmacy HOD)', 'pharm-hod@college.com', 'hod123', 'hod', 'UG', 'Bachelor of Pharmacy (B.Pharm - Core)', 'B.Pharmacy', None, 'Head of Department (Pharmacy)'),
         ('Dr. Peter Drucker (MBA HOD)', 'mba-hod@college.com', 'hod123', 'hod', 'PG', 'MBA (Business Analytics)', 'MBA', None, 'Head of Department (MBA)'),
         ('Dr. Barbara Liskov (MCA HOD)', 'mca-hod@college.com', 'hod123', 'hod', 'PG', 'Master of Computer Applications (MCA - Regular)', 'MCA', None, 'Head of Department (MCA)'),
         ('Dr. Claude Shannon (M.Tech HOD)', 'mtech-hod@college.com', 'hod123', 'hod', 'PG', 'M.Tech (Computer Science & Engineering)', 'M.Tech', None, 'Head of Department (M.Tech)'),
@@ -388,7 +387,7 @@ def index():
 @login_required
 def dashboard():
     user = get_current_user()
-    if user['role'] == 'staff':
+    if user['role'] in ['staff', 'hod']:
         return redirect(url_for('department_dashboard'))
     elif user['role'] == 'admin':
         return redirect(url_for('admin_dashboard'))
@@ -696,15 +695,19 @@ def query_details(query_id):
                 'last_active': staff_row['last_active_at']
             }
 
-    # 3. Branch HOD Presence
-    hod_row = db.execute("SELECT id, name, role, department, designation, last_active_at FROM users WHERE role = 'hod' AND department = ? LIMIT 1", (query['department'],)).fetchone()
+    # 3. Branch HOD Presence & Details
+    hod_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'hod' AND (department = ? OR department IS NULL) LIMIT 1", (query['department'],)).fetchone()
+    if not hod_row:
+        hod_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'hod' LIMIT 1").fetchone()
+
     hod_presence = None
     if hod_row:
         hod_presence = {
             'id': hod_row['id'],
             'name': hod_row['name'],
+            'email': hod_row['email'],
             'role': 'Branch HOD',
-            'department': hod_row['department'],
+            'department': hod_row['department'] or query['department'],
             'designation': hod_row['designation'] or 'Head of Department',
             'is_online': (hod_row['id'] in ONLINE_USERS),
             'last_active': hod_row['last_active_at']
