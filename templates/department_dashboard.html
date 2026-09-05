@@ -13,14 +13,26 @@
           <span class="badge badge-status-waiting" style="background: rgba(255,255,255,0.2); color: #fff; border: none;">
             {% if current_user.role == 'hod' %}
               🎓 {{ dept }} Head of Department (HOD) Portal
+            {% elif current_user.role in ['staff', 'faculty'] %}
+              🛠️ My Assigned Resolution Desk ({{ current_user.name }})
             {% else %}
               🏢 {{ dept }} Department Desk
             {% endif %}
           </span>
         </div>
-        <h1 style="font-size: 1.75rem; margin-bottom: 0.25rem;">{{ dept }} Query Resolution Queue</h1>
+        <h1 style="font-size: 1.75rem; margin-bottom: 0.25rem;">
+          {% if current_user.role in ['staff', 'faculty'] %}
+            My Assigned Query Resolution Queue
+          {% else %}
+            {{ dept }} Query Resolution Queue
+          {% endif %}
+        </h1>
         <p style="font-size: 0.88rem; color: #c7d2fe; margin: 0;">
-          {{ dept_info.description if dept_info else 'Manage and respond to student and faculty queries in real-time.' }}
+          {% if current_user.role in ['staff', 'faculty'] %}
+            Manage, communicate, and resolve student & faculty problems assigned to you by Department HOD.
+          {% else %}
+            {{ dept_info.description if dept_info else 'Manage and respond to student and faculty queries in real-time.' }}
+          {% endif %}
         </p>
       </div>
 
@@ -67,7 +79,7 @@
       <div class="stat-icon primary">🆕</div>
       <div class="stat-info">
         <h3 id="statNewQueries">{{ stats.new }}</h3>
-        <p>New Queries</p>
+        <p>{% if current_user.role in ['staff', 'faculty'] %}Newly Assigned{% else %}New Queries{% endif %}</p>
       </div>
     </div>
     <div class="stat-card">
@@ -107,14 +119,16 @@
       <a href="{{ url_for('department_dashboard', dept=dept, view='unresolved') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unresolved' or not current_view %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
         ⏳ Unresolved Problems ({{ unresolved_count }})
       </a>
+      {% if current_user.role in ['hod', 'admin'] %}
       <a href="{{ url_for('department_dashboard', dept=dept, view='unassigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unassigned' %}background: #dc2626; color: #fff; border: none;{% else %}background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;{% endif %} padding: 0.45rem 0.9rem;">
         ⚡ Unassigned ({{ unassigned_count }})
       </a>
+      {% endif %}
       <a href="{{ url_for('department_dashboard', dept=dept, view='recent') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'recent' %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
         🆕 Recently Added
       </a>
       <a href="{{ url_for('department_dashboard', dept=dept, view='all') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'all' %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
-        📋 All Department Problems ({{ total_dept_count }})
+        📋 {% if current_user.role in ['staff', 'faculty'] %}All Assigned Problems{% else %}All Department Problems{% endif %} ({{ total_dept_count }})
       </a>
     </div>
 
@@ -226,7 +240,13 @@
             <td colspan="8" style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
               <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎉</div>
               <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--text-main);">Queue is Clear</h3>
-              <p style="font-size: 0.85rem; margin-top: 4px;">No queries currently matching the selected filters for {{ dept }} Department.</p>
+              <p style="font-size: 0.85rem; margin-top: 4px;">
+                {% if current_user.role in ['staff', 'faculty'] %}
+                  You currently have no pending queries assigned to you.
+                {% else %}
+                  No queries currently matching the selected filters for {{ dept }} Department.
+                {% endif %}
+              </p>
             </td>
           </tr>
         {% endif %}

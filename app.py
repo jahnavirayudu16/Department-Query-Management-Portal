@@ -621,20 +621,15 @@ def query_details(query_id):
         return redirect(url_for('dashboard'))
         
     # Authorization checks:
-    # 1. Submitter: can see their own query
-    if user['id'] == query['user_id']:
-        pass
-    # 2. HOD: can see queries in their department
-    elif user['role'] == 'hod' and (query['department'] == user['department'] or not user['department']):
-        pass
-    # 3. Central Admin: oversees queries
-    elif user['role'] == 'admin':
-        pass
-    # 4. Assigned Staff / Faculty: ONLY if specifically assigned to them by HOD
-    elif user['role'] in ['staff', 'faculty'] and query['assigned_staff_id'] == user['id']:
-        pass
-    else:
-        flash('Access restricted: This query is assigned to a different resolver or pending HOD assignment.', 'warning')
+    is_submitter = (user['id'] == query['user_id'])
+    is_admin = (user['role'] == 'admin')
+    is_hod = (user['role'] == 'hod')
+    is_assigned = (query['assigned_staff_id'] == user['id'])
+    is_staff = (user['role'] in ['staff', 'faculty'])
+    
+    # Submitter, Central Admin, HOD, Assigned Resolver, or Department Staff can access
+    if not (is_submitter or is_admin or is_hod or is_assigned or is_staff):
+        flash('Access restricted: You do not have permission to view this query.', 'warning')
         if user['role'] in ['staff', 'faculty', 'hod']:
             return redirect(url_for('department_dashboard'))
         return redirect(url_for('dashboard'))
@@ -690,7 +685,7 @@ def query_details(query_id):
     
     # Calculate Live Presence & Online Status for all 3 key parties: Submitter, Assigned Staff, Branch HOD
     # 1. Submitter Presence
-    sub_row = db.execute("SELECT id, name, role, department, last_active_at FROM users WHERE id = ?", (query['user_id'],)).fetchone()
+    sub_row = db.execute("SELECT id, name, role, department, course, level, last_active_at FROM users WHERE id = ?", (query['user_id'],)).fetchone()
     submitter_presence = {
         'id': sub_row['id'] if sub_row else query['user_id'],
         'name': sub_row['name'] if sub_row else 'Submitter',
@@ -727,7 +722,7 @@ def query_details(query_id):
         """, (target_dept,)).fetchone()
         
         # 2. Match by course if submitter belongs to specific academic course
-        if not hod_row and sub_row and sub_row['course']:
+        if not hod_row and sub_row and ('course' in sub_row.keys() and sub_row['course']):
             hod_row = db.execute("""
                 SELECT id, name, email, role, department, designation, last_active_at 
                 FROM users 
@@ -787,13 +782,14 @@ def post_message(query_id):
     if not query:
         return jsonify({'error': 'Query not found'}), 404
         
-    # Permission check: Allowed for Submitter, Assigned Staff/Faculty Resolver, Branch HOD, or Admin
+    # Permission check: Allowed for Submitter, Assigned Staff/Faculty Resolver, Branch HOD, Admin, or Department Staff
     is_submitter = (user['id'] == query['user_id'])
     is_assigned_staff = (query['assigned_staff_id'] == user['id'])
-    is_branch_hod = (user['role'] == 'hod' and (query['department'] == user['department'] or not user['department']))
+    is_branch_hod = (user['role'] == 'hod')
+    is_staff = (user['role'] in ['staff', 'faculty'])
     is_admin = (user['role'] == 'admin')
     
-    if not (is_submitter or is_assigned_staff or is_branch_hod or is_admin):
+    if not (is_submitter or is_assigned_staff or is_branch_hod or is_staff or is_admin):
         return jsonify({'error': 'Unauthorized to participate in this query chat.'}), 403
         
     message_text = request.form.get('message', '').strip()
@@ -911,9 +907,14 @@ def update_query_status(query_id):
         flash('Query not found.', 'danger')
         return redirect(url_for('department_dashboard'))
         
-    # Strictly ONLY the assigned staff member or central admin can update status (NOT HOD)
-    if user['role'] != 'admin' and query['assigned_staff_id'] != user['id']:
-        flash('Permission restricted: Only the assigned Staff member can update the query status.', 'danger')
+    # Allowed for assigned staff member, department staff, HOD, or central admin
+    can_update = (
+        user['role'] in ['admin', 'hod', 'staff'] or 
+        query['assigned_staff_id'] == user['id'] or
+        (user['role'] == 'faculty' and query['assigned_staff_id'] == user['id'])
+    )
+    if not can_update:
+        flash('Permission restricted: Only the assigned Resolver, Department Head, or Admin can update the query status.', 'danger')
         return redirect(url_for('query_details', query_id=query_id))
         
     new_status = request.form.get('status')
@@ -1127,27 +1128,42 @@ def faculty_choice():
 @role_required(['staff', 'hod', 'admin', 'faculty'])
 def department_dashboard():
     user = get_current_user()
-    dept = request.args.get('dept')
-    if not dept:
-        dept = user['department'] if user['department'] else 'Academics'
+    is_resolver = user['role'] in ['staff', 'faculty']
+    
+    dept_param = request.args.get('dept')
+    if is_resolver:
+        dept = dept_param if dept_param else (user['department'] if user['department'] else 'All Departments')
+    else:
+        dept = dept_param if dept_param else (user['department'] if user['department'] else 'Academics')
     
     db = get_db()
     today_str = datetime.now().strftime('%Y-%m-%d')
     
-    # Compute department stats
-    stats = {
-        'new': db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND status = 'New'", (dept,)).fetchone()[0],
-        'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND priority = 'Urgent' AND status != 'Resolved'", (dept,)).fetchone()[0],
-        'high': db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND priority = 'High' AND status != 'Resolved'", (dept,)).fetchone()[0],
-        'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND status IN ('Assigned', 'In Progress')", (dept,)).fetchone()[0],
-        'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND status = 'Resolved' AND resolved_at LIKE ?", (dept, f"{today_str}%")).fetchone()[0]
-    }
-    
-    # Department Average First Response Time Calculation
-    resp_rows = db.execute("""
-        SELECT created_at, first_response_at FROM queries 
-        WHERE department = ? AND first_response_at IS NOT NULL
-    """, (dept,)).fetchall()
+    # Compute stats
+    if is_resolver:
+        stats = {
+            'new': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('New', 'Assigned')", (user['id'],)).fetchone()[0],
+            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND priority = 'Urgent' AND status != 'Resolved'", (user['id'],)).fetchone()[0],
+            'high': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND priority = 'High' AND status != 'Resolved'", (user['id'],)).fetchone()[0],
+            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('Assigned', 'In Progress')", (user['id'],)).fetchone()[0],
+            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (user['id'], f"{today_str}%", f"{today_str}%")).fetchone()[0]
+        }
+        resp_rows = db.execute("""
+            SELECT created_at, first_response_at FROM queries 
+            WHERE assigned_staff_id = ? AND first_response_at IS NOT NULL
+        """, (user['id'],)).fetchall()
+    else:
+        stats = {
+            'new': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status = 'New'", (dept, dept, dept)).fetchone()[0],
+            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND priority = 'Urgent' AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0],
+            'high': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND priority = 'High' AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0],
+            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status IN ('Assigned', 'In Progress')", (dept, dept, dept)).fetchone()[0],
+            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (dept, dept, dept, f"{today_str}%", f"{today_str}%")).fetchone()[0]
+        }
+        resp_rows = db.execute("""
+            SELECT created_at, first_response_at FROM queries 
+            WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND first_response_at IS NOT NULL
+        """, (dept, dept, dept)).fetchall()
     
     avg_resp_display = "10 minutes"
     if resp_rows:
@@ -1188,19 +1204,29 @@ def department_dashboard():
         FROM queries q
         JOIN users u ON q.user_id = u.id
         LEFT JOIN users staff ON q.assigned_staff_id = staff.id
-        WHERE q.department = ?
+        WHERE 1=1
     """
-    params = [dept]
+    params = []
     
-    # Strict isolation: Faculty resolvers and staff see ONLY their assigned queries
-    if user['role'] in ['staff', 'faculty']:
+    if is_resolver:
+        # Staff and Faculty resolvers see all queries assigned to them
         sql += " AND q.assigned_staff_id = ?"
         params.append(user['id'])
+        if dept_param and dept_param not in ['All', 'All Departments', '']:
+            sql += " AND q.department = ?"
+            params.append(dept_param)
+    else:
+        # HOD / Central Admin see department queries
+        if dept and dept not in ['All', 'All Departments']:
+            sql += " AND q.department = ?"
+            params.append(dept)
         
-    if view_mode == 'unresolved':
+    if view_mode == 'unresolved' or not view_mode:
         sql += " AND q.status != 'Resolved'"
     elif view_mode == 'unassigned' and user['role'] in ['hod', 'admin']:
         sql += " AND q.assigned_staff_id IS NULL AND q.status != 'Resolved'"
+    elif view_mode == 'all':
+        pass  # all queries
     elif view_mode == 'recent':
         pass  # will order by created_at DESC
         
@@ -1223,14 +1249,14 @@ def department_dashboard():
     queries = db.execute(sql, params).fetchall()
     
     # Counts for quick tabs
-    if user['role'] in ['staff', 'faculty']:
+    if is_resolver:
         unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status != 'Resolved'", (user['id'],)).fetchone()[0]
         unassigned_count = 0
         total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
     else:
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND status != 'Resolved'", (dept,)).fetchone()[0]
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ? AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept,)).fetchone()[0]
-        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ?", (dept,)).fetchone()[0]
+        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
+        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
+        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments')", (dept, dept, dept)).fetchone()[0]
     
     # Department info
     dept_info = db.execute("SELECT * FROM departments WHERE name = ?", (dept,)).fetchone()
