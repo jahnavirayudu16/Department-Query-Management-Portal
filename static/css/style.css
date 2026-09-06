@@ -738,10 +738,12 @@ a:hover {
   transform: scale(1.05);
 }
 
+.badge-critical,
 .badge-urgent {
   background-color: #fee2e2;
   color: #991b1b;
   border: 1px solid #f87171;
+  font-weight: 800;
   animation: urgentPulse 2.5s infinite;
 }
 

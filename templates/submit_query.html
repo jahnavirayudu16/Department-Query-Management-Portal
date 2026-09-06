@@ -1,77 +1,192 @@
 {% extends 'base.html' %}
 
-{% block page_title %}Post New Query{% endblock %}
+{% block page_title %}Post Query{% endblock %}
 
 {% block content %}
-<div style="max-width: 800px; margin: 0 auto;">
+<div style="max-width: 820px; margin: 1rem auto 3rem;">
 
-  <div class="card" style="padding: 2.25rem;">
-    <div style="margin-bottom: 1.75rem;">
-      <span class="badge badge-status-new" style="margin-bottom: 0.5rem;">🤖 Zero-Click Automatic Routing</span>
-      <h1 style="font-size: 1.6rem; font-weight: 800; color: var(--text-main);">What problem can we help you with?</h1>
-      <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 4px;">
-        Simply describe your issue in your own words. Our smart NLP engine will automatically identify the right department and assign priority.
+  <!-- Mode Switcher Tabs: Student Query vs Faculty Query -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem;">
+    <button type="button" id="tabStudentBtn" onclick="switchQueryMode('student')" class="btn" style="padding: 0.85rem 1rem; font-weight: 800; font-size: 0.95rem; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; background: var(--primary); color: #ffffff; border: 2px solid var(--primary); box-shadow: var(--shadow-sm);">
+      <span style="font-size: 1.3rem;">👨‍🎓</span>
+      <span>Student Query</span>
+    </button>
+
+    <button type="button" id="tabFacultyBtn" onclick="switchQueryMode('faculty')" class="btn" style="padding: 0.85rem 1rem; font-weight: 800; font-size: 0.95rem; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; background: #f8fafc; color: #334155; border: 2px solid #cbd5e1;">
+      <span style="font-size: 1.3rem;">👩‍🏫</span>
+      <span>Faculty Query</span>
+    </button>
+  </div>
+
+  <div class="card" style="padding: 2.25rem; background: #ffffff; border: 1px solid var(--border-color); box-shadow: var(--shadow-md);">
+    
+    <!-- Dynamic Header -->
+    <div style="margin-bottom: 1.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1.25rem;">
+      <span id="headerBadge" class="badge badge-status-assigned" style="margin-bottom: 0.5rem; font-size: 0.8rem;">
+        🤖 Automatic HOD Routing & Dynamic Priority
+      </span>
+      <h1 id="headerTitle" style="font-size: 1.65rem; font-weight: 800; color: var(--text-main); margin: 0.25rem 0 0.5rem;">
+        Submit Student Query
+      </h1>
+      <p id="headerDesc" style="font-size: 0.9rem; color: var(--text-muted); margin: 0; line-height: 1.5;">
+        Students can directly submit queries without mandatory login. Simply select your academic branch and describe your issue.
       </p>
     </div>
 
-    <form method="POST" action="{{ url_for('submit_query') }}" enctype="multipart/form-data">
+    <form method="POST" action="{{ url_for('submit_query') }}" enctype="multipart/form-data" id="querySubmitForm">
       
-      <div class="form-group">
-        <label for="queryTitle" class="form-label">Query Title / Summary *</label>
-        <input type="text" id="queryTitle" name="title" class="form-control" placeholder="e.g. College Wi-Fi is not working in computer lab 3" required autofocus style="font-size: 1rem; padding: 0.85rem 1rem;">
-      </div>
+      <!-- Hidden Query Type (student or faculty) -->
+      <input type="hidden" name="query_type" id="queryTypeInput" value="student">
 
-      <div class="form-group">
-        <label for="queryDesc" class="form-label">Detailed Problem Description *</label>
-        <textarea id="queryDesc" name="description" class="form-control" rows="6" placeholder="Provide as much detail as possible (e.g. what happened, room number, transaction ref, error message, urgency, etc.)..." required style="font-size: 0.95rem; line-height: 1.5; padding: 0.85rem 1rem;"></textarea>
-      </div>
-
-      <!-- Live AI Detection Preview Card -->
-      <div id="aiPreviewBox" class="ai-preview-box" style="display: none;">
-        <div class="ai-preview-header">
-          <div class="ai-badge-spark">
-            <span>✨</span> Smart Detection Live Preview
-          </div>
-          <span id="previewConf" style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">95% Confidence</span>
+      <!-- ================= 1. STUDENT ACADEMIC FIELDS SECTION ================= -->
+      <div id="studentAcademicSection" style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="font-size: 0.82rem; font-weight: 800; color: #1e293b; text-transform: uppercase; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
+          <span>🎓</span> Student Academic Details
         </div>
 
-        <div style="display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
-          <div>
-            <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block;">Routed Department</span>
-            <strong id="previewDept" style="font-size: 1.05rem; color: var(--primary);">IT Department</strong>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem;">
+          <!-- 1. Academic Level -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="levelSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700;">Academic Level *</label>
+            <select id="levelSelect" name="level" class="form-control" style="font-size: 0.88rem; padding: 0.65rem 0.85rem;">
+              <option value="UG" selected>Undergraduate (UG)</option>
+              <option value="PG">Postgraduate (PG)</option>
+              <option value="Diploma">Polytechnic / Diploma</option>
+            </select>
           </div>
-          <div>
-            <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block;">Category</span>
-            <span id="previewCat" style="font-size: 0.9rem; font-weight: 600; color: var(--text-main);">Technical Issue</span>
+
+          <!-- 2. Program / Course -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="courseSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700;">Program / Course *</label>
+            <select id="courseSelect" name="course" class="form-control" style="font-size: 0.88rem; padding: 0.65rem 0.85rem;">
+              <!-- Populated dynamically -->
+            </select>
           </div>
-          <div>
-            <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; display: block;">Detected Priority</span>
-            <span id="previewPrio" class="badge badge-high">High</span>
+
+          <!-- 3. Department / Branch -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="deptSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700;">Department / Branch *</label>
+            <select id="deptSelect" name="department" class="form-control" onchange="onDepartmentChanged()" style="font-size: 0.88rem; padding: 0.65rem 0.85rem; font-weight: 600;">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <!-- 4. Year of Study -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="yearSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700;">Year of Study *</label>
+            <select id="yearSelect" name="year" class="form-control" style="font-size: 0.88rem; padding: 0.65rem 0.85rem;">
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3" selected>3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
           </div>
         </div>
 
-        <p id="previewReason" style="font-size: 0.82rem; color: #475569; margin-top: 0.35rem; font-style: italic; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 0.35rem;">
-          Matched keywords corresponding to IT infrastructure.
-        </p>
+        <!-- Optional Student Roll No -->
+        <div class="form-group" style="margin-top: 1rem; margin-bottom: 0;">
+          <label for="rollNoInput" class="form-label" style="font-size: 0.82rem; font-weight: 700;">
+            Student Regd ID / Roll Number <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">(Optional)</span>
+          </label>
+          <input type="text" id="rollNoInput" name="roll_no" class="form-control" placeholder="e.g. 21B91A0501 (Optional)" style="font-size: 0.88rem;">
+        </div>
+      </div>
+
+      <!-- ================= 2. FACULTY DEPARTMENT ONLY SECTION ================= -->
+      <div id="facultyDepartmentSection" style="display: none; background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="font-size: 0.82rem; font-weight: 800; color: #166534; text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;">
+          <span>🏢</span> Department / Wing Selection
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="facDeptSelect" class="form-label" style="font-weight: 700; font-size: 0.88rem;">Select Department *</label>
+          <select id="facDeptSelect" name="faculty_department" class="form-control" onchange="onDepartmentChanged()" style="font-size: 0.95rem; font-weight: 600; padding: 0.75rem 0.85rem; background: #ffffff;">
+            <option value="Computer Science & Engineering (CSE)" selected>Computer Science & Engineering (CSE)</option>
+            <option value="Information Technology (IT)">Information Technology (IT)</option>
+            <option value="Artificial Intelligence & Data Science (AI&DS)">Artificial Intelligence & Data Science (AI&DS)</option>
+            <option value="Artificial Intelligence & Machine Learning (AIML)">Artificial Intelligence & Machine Learning (AIML)</option>
+            <option value="Electronics & Communication Engineering (ECE)">Electronics & Communication Engineering (ECE)</option>
+            <option value="Electrical & Electronics Engineering (EEE)">Electrical & Electronics Engineering (EEE)</option>
+            <option value="Mechanical Engineering (Mech)">Mechanical Engineering (Mech)</option>
+            <option value="Civil Engineering (Civil)">Civil Engineering (Civil)</option>
+            <option value="Master of Computer Applications (MCA)">Master of Computer Applications (MCA)</option>
+            <option value="Master of Business Administration (MBA)">Master of Business Administration (MBA)</option>
+            <option value="Science & Humanities (S&H)">Science & Humanities (S&H)</option>
+            <option value="Administrative">Administrative Department</option>
+            <option value="Others">Others / Campus Facilities</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Problem Title -->
+      <div class="form-group">
+        <label for="queryTitle" class="form-label" style="font-weight: 800;">Query Title / Problem Summary *</label>
+        <input type="text" id="queryTitle" name="title" class="form-control" placeholder="e.g. Timetable clash in DBMS / Fee receipt delay / Wi-Fi outage in Block B" required autofocus style="font-size: 0.98rem; padding: 0.8rem 1rem;">
+      </div>
+
+      <!-- Problem Detailed Description -->
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label for="queryDesc" class="form-label" style="font-weight: 800;">Detailed Problem Description *</label>
+        <textarea id="queryDesc" name="description" class="form-control" rows="5" placeholder="Provide full details of your issue (e.g. date/time, subject, room number, specific challenge, or required assistance)..." required style="font-size: 0.95rem; line-height: 1.5; padding: 0.85rem 1rem;"></textarea>
+      </div>
+
+      <!-- COMPACT REAL-TIME AI ROUTING PREVIEW -->
+      <div id="aiLivePreviewCard" style="display: none; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: var(--radius-sm); padding: 0.6rem 0.85rem; margin-bottom: 1.1rem; font-size: 0.82rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <span style="font-weight: 800; color: #166534; font-size: 0.8rem;">⚡ Auto-Route:</span>
+            <span id="previewCategoryText" class="badge" style="background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; font-weight: 700; font-size: 0.78rem; padding: 2px 7px;">
+              📚 Academics
+            </span>
+            <span style="color: #64748b; font-weight: 700; font-size: 0.75rem;">→</span>
+            <span id="previewDestinationText" class="badge" style="background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; font-weight: 700; font-size: 0.78rem; padding: 2px 7px;">
+              🎓 CSE HOD
+            </span>
+            <span id="previewPriorityBadge" class="badge badge-high" style="font-size: 0.72rem; padding: 2px 6px;">
+              High
+            </span>
+          </div>
+          <span id="previewConfidenceBadge" style="font-size: 0.72rem; color: #15803d; font-weight: 700;">
+            95% Match
+          </span>
+        </div>
+        <div id="previewExplanation" style="font-size: 0.74rem; color: #475569; margin-top: 3px; font-style: italic;">
+          ✨ Matched context keywords.
+        </div>
       </div>
 
       <!-- Optional File Attachment -->
-      <div class="form-group" style="margin-top: 1.5rem;">
-        <label for="attachment" class="form-label">
-          📎 Optional Attachment (Screenshot, Fee Receipt, PDF, Document)
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label for="attachment" class="form-label" style="display: flex; align-items: center; justify-content: space-between; font-weight: 700;">
+          <span>📎 Optional Attachment (Document, Memo, Photo, Screenshot, PDF)</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">Optional</span>
         </label>
         <input type="file" id="attachment" name="attachment" class="form-control" accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt,.zip">
         <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: block;">
-          Max file size: 16 MB. Supported: JPG, PNG, PDF, DOCX, TXT.
+          Max file size: 16 MB. Supported formats: JPG, PNG, PDF, DOCX, TXT.
         </span>
       </div>
 
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+      <!-- Optional Submitter Name & Email for Tracking -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.75rem; background: #f8fafc; padding: 1rem; border-radius: var(--radius-md); border: 1px solid #e2e8f0;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="nameInput" class="form-label" style="font-size: 0.82rem; font-weight: 700;">Your Name <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional)</span></label>
+          <input type="text" id="nameInput" name="name" class="form-control" placeholder="e.g. Prof. Kumar / Ravi" value="{{ current_user.name if current_user else '' }}" style="background: #ffffff; font-size: 0.88rem;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="emailInput" class="form-label" style="font-size: 0.82rem; font-weight: 700;">Email Address <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional)</span></label>
+          <input type="email" id="emailInput" name="email" class="form-control" placeholder="For instant reply notifications" value="{{ current_user.email if current_user else '' }}" style="background: #ffffff; font-size: 0.88rem;">
+        </div>
+      </div>
+
+      <!-- Submit & Action Buttons -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <a href="{{ url_for('dashboard') if current_user else url_for('index') }}" class="btn btn-secondary">
           ← Cancel
         </a>
-        <button type="submit" class="btn btn-primary btn-lg">
-          🚀 Submit & Automatically Route Query
+        <button type="submit" id="submitBtn" class="btn btn-primary btn-lg" style="font-weight: 800; padding: 0.85rem 1.75rem; font-size: 1rem; box-shadow: var(--shadow-md);">
+          🚀 Submit & Route Query
         </button>
       </div>
 
@@ -79,4 +194,334 @@
   </div>
 
 </div>
+
+<script>
+// Cascading Hierarchy for Student Query
+const studentHierarchy = {
+  'UG': {
+    programs: ['B.Tech', 'Degree (B.Sc / BCA / B.Com / BBA)'],
+    details: {
+      'B.Tech': [
+        'Computer Science & Engineering (CSE)',
+        'Information Technology (IT)',
+        'Artificial Intelligence & Data Science (AI&DS)',
+        'Artificial Intelligence & Machine Learning (AIML)',
+        'Electronics & Communication Engineering (ECE)',
+        'Electrical & Electronics Engineering (EEE)',
+        'Mechanical Engineering (Mech)',
+        'Civil Engineering (Civil)'
+      ],
+      'Degree (B.Sc / BCA / B.Com / BBA)': [
+        'Bachelor of Computer Applications (BCA)',
+        'B.Sc (Computer Science)',
+        'B.Sc (Data Science)',
+        'B.Sc (Mathematics & Physics)',
+        'B.Com (Computer Applications)',
+        'Bachelor of Business Administration (BBA)',
+        'Science & Humanities (S&H)'
+      ]
+    }
+  },
+  'PG': {
+    programs: ['M.Tech', 'MCA', 'MBA', 'M.Sc'],
+    details: {
+      'M.Tech': [
+        'Computer Science & Engineering (CSE)',
+        'VLSI & Embedded Systems',
+        'Power Electronics & Drives',
+        'CAD / CAM Robotics',
+        'Structural Engineering'
+      ],
+      'MCA': ['Master of Computer Applications (MCA)'],
+      'MBA': ['Master of Business Administration (MBA)'],
+      'M.Sc': ['M.Sc (Computer Science)', 'M.Sc (Data Science)', 'M.Sc (Chemistry / Physics / Maths)']
+    }
+  },
+  'Diploma': {
+    programs: ['Polytechnic Diploma'],
+    details: {
+      'Polytechnic Diploma': [
+        'Diploma in Computer Engineering (DCME)',
+        'Diploma in Electronics & Communication (DECE)',
+        'Diploma in Electrical & Electronics (DEEE)',
+        'Diploma in Mechanical Engineering (DME)',
+        'Diploma in Civil Engineering (DCE)'
+      ]
+    }
+  }
+};
+
+function updateStudentCourses() {
+  const levelSelect = document.getElementById('levelSelect');
+  const courseSelect = document.getElementById('courseSelect');
+  if (!levelSelect || !courseSelect) return;
+
+  const level = levelSelect.value;
+  const levelData = studentHierarchy[level] || studentHierarchy['UG'];
+
+  courseSelect.innerHTML = '';
+  levelData.programs.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    courseSelect.appendChild(opt);
+  });
+
+  updateStudentDepts();
+  updateStudentYears();
+}
+
+function updateStudentDepts() {
+  const levelSelect = document.getElementById('levelSelect');
+  const courseSelect = document.getElementById('courseSelect');
+  const deptSelect = document.getElementById('deptSelect');
+  if (!levelSelect || !courseSelect || !deptSelect) return;
+
+  const level = levelSelect.value;
+  const program = courseSelect.value;
+  const levelData = studentHierarchy[level] || studentHierarchy['UG'];
+  const depts = levelData.details[program] || levelData.details[levelData.programs[0]] || [];
+
+  deptSelect.innerHTML = '';
+  depts.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    deptSelect.appendChild(opt);
+  });
+}
+
+function updateStudentYears() {
+  const levelSelect = document.getElementById('levelSelect');
+  const yearSelect = document.getElementById('yearSelect');
+  if (!levelSelect || !yearSelect) return;
+
+  const level = levelSelect.value;
+  yearSelect.innerHTML = '';
+  const maxYear = (level === 'PG' ? 2 : (level === 'Diploma' ? 3 : 4));
+  for (let i = 1; i <= maxYear; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} Year`;
+    if (i === 3 && maxYear >= 3) opt.selected = true;
+    yearSelect.appendChild(opt);
+  }
+}
+
+// Switch between Student Query & Faculty Query
+function switchQueryMode(mode) {
+  const tabStudentBtn = document.getElementById('tabStudentBtn');
+  const tabFacultyBtn = document.getElementById('tabFacultyBtn');
+  const studentSection = document.getElementById('studentAcademicSection');
+  const facultySection = document.getElementById('facultyDepartmentSection');
+  const queryTypeInput = document.getElementById('queryTypeInput');
+  const headerTitle = document.getElementById('headerTitle');
+  const headerDesc = document.getElementById('headerDesc');
+  const submitBtn = document.getElementById('submitBtn');
+
+  if (mode === 'faculty') {
+    // Faculty Mode Active
+    queryTypeInput.value = 'faculty';
+    tabFacultyBtn.style.background = '#0284c7';
+    tabFacultyBtn.style.color = '#ffffff';
+    tabFacultyBtn.style.borderColor = '#0284c7';
+    tabFacultyBtn.style.boxShadow = 'var(--shadow-sm)';
+
+    tabStudentBtn.style.background = '#f8fafc';
+    tabStudentBtn.style.color = '#334155';
+    tabStudentBtn.style.borderColor = '#cbd5e1';
+    tabStudentBtn.style.boxShadow = 'none';
+
+    studentSection.style.display = 'none';
+    facultySection.style.display = 'block';
+
+    headerTitle.textContent = 'Submit Faculty Query';
+    headerDesc.textContent = 'Faculty members can post teaching, departmental, administrative, or campus issues directly with your department details.';
+    submitBtn.textContent = '🚀 Submit Faculty Query';
+  } else {
+    // Student Mode Active
+    queryTypeInput.value = 'student';
+    tabStudentBtn.style.background = 'var(--primary)';
+    tabStudentBtn.style.color = '#ffffff';
+    tabStudentBtn.style.borderColor = 'var(--primary)';
+    tabStudentBtn.style.boxShadow = 'var(--shadow-sm)';
+
+    tabFacultyBtn.style.background = '#f8fafc';
+    tabFacultyBtn.style.color = '#334155';
+    tabFacultyBtn.style.borderColor = '#cbd5e1';
+    tabFacultyBtn.style.boxShadow = 'none';
+
+    studentSection.style.display = 'block';
+    facultySection.style.display = 'none';
+
+    headerTitle.textContent = 'Submit Student Query';
+    headerDesc.textContent = 'Students can directly submit queries without mandatory login. Simply select your academic branch and describe your issue.';
+    submitBtn.textContent = '🚀 Submit Student Query';
+  }
+
+  triggerLiveClassification();
+}
+
+// =======================================================================
+// REAL-TIME AI ROUTING & CATEGORY DETECTION LIVE PREVIEW
+// =======================================================================
+let classifyTimer = null;
+let lastDetectedCategory = 'Academics';
+
+function getSelectedDepartment() {
+  const queryType = document.getElementById('queryTypeInput').value;
+  if (queryType === 'faculty') {
+    const facDept = document.getElementById('facDeptSelect');
+    return facDept ? facDept.value : 'Computer Science & Engineering (CSE)';
+  } else {
+    const stdDept = document.getElementById('deptSelect');
+    return stdDept && stdDept.value ? stdDept.value : 'Computer Science & Engineering (CSE)';
+  }
+}
+
+function onDepartmentChanged() {
+  updateDestinationDisplay(lastDetectedCategory);
+}
+
+function getShortDept(dept) {
+  if (!dept) return 'Dept HOD';
+  if (dept.includes('(CSE)')) return 'CSE HOD';
+  if (dept.includes('(ECE)')) return 'ECE HOD';
+  if (dept.includes('(EEE)')) return 'EEE HOD';
+  if (dept.includes('(ME)') || dept.includes('(Mech)')) return 'Mech HOD';
+  if (dept.includes('Civil')) return 'Civil HOD';
+  if (dept.includes('(IT)')) return 'IT HOD';
+  if (dept.includes('(AI&DS)')) return 'AI&DS HOD';
+  if (dept.includes('(AIML)')) return 'AIML HOD';
+  if (dept.includes('(MCA)')) return 'MCA HOD';
+  if (dept.includes('(MBA)')) return 'MBA HOD';
+  if (dept.includes('Science') || dept.includes('(S&H)')) return 'S&H HOD';
+  return `${dept.split(' ')[0]} HOD`;
+}
+
+function updateDestinationDisplay(category) {
+  lastDetectedCategory = category;
+  const destEl = document.getElementById('previewDestinationText');
+  if (!destEl) return;
+
+  const currentDept = getSelectedDepartment();
+  const queryType = document.getElementById('queryTypeInput') ? document.getElementById('queryTypeInput').value : 'student';
+  const courseSelect = document.getElementById('courseSelect');
+  const courseVal = (queryType === 'student' && courseSelect && courseSelect.value) ? courseSelect.value : '';
+
+  if (category === 'Academics') {
+    if (courseVal) {
+      destEl.innerHTML = `🎓 ${courseVal} ${getShortDept(currentDept)}`;
+    } else {
+      destEl.innerHTML = `🎓 ${getShortDept(currentDept)}`;
+    }
+  } else if (category === 'Administrative') {
+    destEl.innerHTML = `🏢 AO Desk`;
+  } else {
+    destEl.innerHTML = `🏛️ Principal Desk`;
+  }
+}
+
+function triggerLiveClassification() {
+  clearTimeout(classifyTimer);
+  classifyTimer = setTimeout(() => {
+    const titleInput = document.getElementById('queryTitle');
+    const descInput = document.getElementById('queryDesc');
+    const previewCard = document.getElementById('aiLivePreviewCard');
+
+    const title = titleInput ? titleInput.value.trim() : '';
+    const description = descInput ? descInput.value.trim() : '';
+
+    if (title.length < 3 && description.length < 3) {
+      if (previewCard) previewCard.style.display = 'none';
+      return;
+    }
+
+    fetch('/api/classify-preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title, description: description })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data) return;
+
+      const catEl = document.getElementById('previewCategoryText');
+      const prioBadge = document.getElementById('previewPriorityBadge');
+      const confBadge = document.getElementById('previewConfidenceBadge');
+      const reasonEl = document.getElementById('previewExplanation');
+
+      if (previewCard) previewCard.style.display = 'block';
+
+      // 1. Category Icon & Text
+      const cat = data.category || 'Academics';
+      let icon = '📚';
+      if (cat === 'Administrative') icon = '🏢';
+      else if (cat === 'Others') icon = '🔧';
+
+      if (catEl) {
+        catEl.innerHTML = `${icon} ${cat}`;
+      }
+
+      // 2. Routed Destination Desk
+      updateDestinationDisplay(cat);
+
+      // 3. Dynamic Priority Badge
+      const priority = data.priority || 'Medium';
+      if (prioBadge) {
+        prioBadge.textContent = `${priority} Priority`;
+        prioBadge.className = `badge badge-${priority.toLowerCase()}`;
+      }
+
+      // 4. Confidence
+      if (confBadge && data.confidence) {
+        confBadge.textContent = `${Math.round(data.confidence * 100)}% Confidence`;
+      }
+
+      // 5. Reason
+      if (reasonEl && data.explanation) {
+        reasonEl.textContent = `✨ ${data.explanation}`;
+      }
+    })
+    .catch(err => {
+      console.warn('Live classification preview skipped:', err);
+    });
+
+  }, 200);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const levelSelect = document.getElementById('levelSelect');
+  const courseSelect = document.getElementById('courseSelect');
+  const titleInput = document.getElementById('queryTitle');
+  const descInput = document.getElementById('queryDesc');
+
+  if (levelSelect && courseSelect) {
+    levelSelect.addEventListener('change', updateStudentCourses);
+    courseSelect.addEventListener('change', updateStudentDepts);
+    updateStudentCourses();
+  }
+
+  if (titleInput) {
+    titleInput.addEventListener('input', triggerLiveClassification);
+    titleInput.addEventListener('keyup', triggerLiveClassification);
+  }
+
+  if (descInput) {
+    descInput.addEventListener('input', triggerLiveClassification);
+    descInput.addEventListener('keyup', triggerLiveClassification);
+  }
+
+  // Check URL query parameters or current user role
+  const urlParams = new URLSearchParams(window.location.search);
+  const typeParam = urlParams.get('type');
+  const userRole = document.body.getAttribute('data-user-role');
+
+  if (typeParam === 'faculty' || userRole === 'faculty' || userRole === 'staff' || userRole === 'hod') {
+    switchQueryMode('faculty');
+  } else {
+    switchQueryMode('student');
+  }
+});
+</script>
 {% endblock %}

@@ -26,8 +26,11 @@
       <select name="role" class="form-control" onchange="this.form.submit()">
         <option value="">All Roles</option>
         <option value="student" {% if current_role == 'student' %}selected{% endif %}>Students</option>
-        <option value="faculty" {% if current_role == 'faculty' %}selected{% endif %}>Faculty</option>
-        <option value="staff" {% if current_role == 'staff' %}selected{% endif %}>Staff</option>
+        <option value="staff" {% if current_role == 'staff' %}selected{% endif %}>Academic Staff</option>
+        <option value="office_staff" {% if current_role == 'office_staff' %}selected{% endif %}>Office Staff</option>
+        <option value="hod" {% if current_role == 'hod' %}selected{% endif %}>HODs</option>
+        <option value="ao" {% if current_role == 'ao' %}selected{% endif %}>AO (Admin)</option>
+        <option value="principal" {% if current_role == 'principal' %}selected{% endif %}>Principal</option>
         <option value="admin" {% if current_role == 'admin' %}selected{% endif %}>Admins</option>
       </select>
     </div>
@@ -68,15 +71,19 @@
             <td>
               <div style="font-weight: 700; color: var(--text-main);">
                 {% if u.role == 'student' %}👨‍🎓 Student #{{ u.id }}
+                {% elif u.role == 'office_staff' %}💼 Office Staff
+                {% elif u.role == 'staff' %}👩‍🏫 Department Staff
+                {% elif u.role == 'hod' %}🎓 Head of Dept (HOD)
+                {% elif u.role == 'ao' %}🏢 Administrative Officer
+                {% elif u.role == 'principal' %}🏛️ Principal
                 {% elif u.role == 'faculty' %}👩‍🏫 Faculty Member
-                {% elif u.role == 'staff' %}🏢 Department Staff
                 {% else %}⚡ Administrator{% endif %}
               </div>
               <div style="font-size: 0.78rem; color: var(--text-muted);">{{ u.email }}</div>
             </td>
             <td>
-              <span class="badge badge-sm {% if u.role == 'student' %}badge-low{% elif u.role == 'faculty' %}badge-medium{% elif u.role == 'staff' %}badge-status-assigned{% else %}badge-urgent{% endif %}">
-                {{ u.role | upper }}
+              <span class="badge badge-sm {% if u.role == 'student' %}badge-low{% elif u.role in ['staff', 'office_staff'] %}badge-status-assigned{% elif u.role == 'hod' %}badge-urgent{% elif u.role in ['ao', 'principal'] %}badge-medium{% else %}badge-urgent{% endif %}">
+                {{ u.role | replace('_', ' ') | upper }}
               </span>
             </td>
             <td>{{ u.department or 'General Campus' }}</td>

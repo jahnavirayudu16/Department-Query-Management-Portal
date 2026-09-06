@@ -1,9 +1,46 @@
 {% extends 'base.html' %}
 
-{% block page_title %}Central Admin Analytics & Pie Chart Insights{% endblock %}
+{% block page_title %}Executive Analytics & Insights{% endblock %}
 
 {% block extra_head %}
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
+<style>
+  .analytics-tab-btn {
+    padding: 0.65rem 1.25rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .analytics-tab-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+  .analytics-tab-btn.active {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+  }
+  .tab-pane {
+    display: none;
+  }
+  .tab-pane.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -13,21 +50,31 @@
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
     <div>
       <div style="display: inline-block; background: #ede9fe; color: #5b21b6; font-size: 0.75rem; font-weight: 800; padding: 3px 8px; border-radius: 6px; margin-bottom: 0.35rem; text-transform: uppercase;">
-        {% if current_user.role == 'hod' %}
+        {% if current_user.role == 'principal' %}
+          🏛️ Principal Executive Analysis Cockpit
+        {% elif current_user.role == 'hod' %}
           🎓 {{ current_user.department or 'Department' }} HOD Analytics Cockpit
+        {% elif current_user.role == 'ao' %}
+          🏢 Administrative Officer (AO) Analysis Cockpit
         {% else %}
           ⚡ Central Administrator Visual Cockpit
         {% endif %}
       </div>
       <h1 style="font-size: 1.7rem; font-weight: 800; color: var(--text-main); margin: 0;">
-        {% if current_user.role == 'hod' %}
+        {% if current_user.role == 'principal' %}
+          Campus Leadership & 3-Pillar Executive Analysis
+        {% elif current_user.role == 'hod' %}
           {{ current_user.department or 'Department' }} Branch Analytics Dashboard
+        {% elif current_user.role == 'ao' %}
+          Administrative Operations Analytics Dashboard
         {% else %}
-          Campus-Wide Department & Year Analytics Dashboard
+          Campus-Wide Multi-Pillar Analytics Dashboard
         {% endif %}
       </h1>
       <p style="font-size: 0.88rem; color: var(--text-muted); margin: 0;">
-        {% if current_user.role == 'hod' %}
+        {% if current_user.role == 'principal' %}
+          Executive breakdown tracking: <strong>Principal Desk Queries</strong>, <strong>Administrative Officer (AO) Queries</strong>, and <strong>Department HODs Academics</strong>.
+        {% elif current_user.role == 'hod' %}
           Interactive Pie Charts & statistical breakdown tracking problem volume across years and categories in your branch.
         {% else %}
           Interactive Pie Charts & cross-analysis tracking where most campus problems originate across all departments and academic years.
@@ -36,9 +83,17 @@
     </div>
 
     <div style="display: flex; gap: 0.5rem;">
-      {% if current_user.role == 'hod' %}
+      {% if current_user.role == 'principal' %}
+      <a href="{{ url_for('department_dashboard', dept='Others') }}" class="btn btn-primary btn-sm" style="font-weight: 700;">
+        📥 Received Queries
+      </a>
+      {% elif current_user.role == 'hod' %}
       <a href="{{ url_for('department_dashboard') }}" class="btn btn-primary btn-sm" style="font-weight: 700;">
         📥 Department Queue
+      </a>
+      {% elif current_user.role == 'ao' %}
+      <a href="{{ url_for('department_dashboard', dept='Administrative') }}" class="btn btn-primary btn-sm" style="font-weight: 700;">
+        📥 Administrative Queue
       </a>
       {% else %}
       <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
@@ -51,160 +106,534 @@
     </div>
   </div>
 
-  <!-- Real-time Insights Highlight Banner -->
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-    <div class="card" style="border-left: 5px solid #4f46e5; padding: 1.25rem;">
-      <div style="font-size: 0.78rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">
-        🏢 {% if current_user.role == 'hod' %}Active Department / Branch:{% else %}#1 Most Reported Department:{% endif %}
+  {% if current_user.role in ['principal', 'admin'] %}
+  <!-- 3-Pillar Executive Summary Cards Banner (Principal / Admin: 3 Pillars) -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 1.75rem;">
+    
+    <!-- Pillar 1: Principal Desk Card -->
+    <div class="card" style="border-left: 5px solid #6366f1; padding: 1.25rem; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+        <div>
+          <span style="font-size: 0.75rem; font-weight: 800; color: #4338ca; text-transform: uppercase; letter-spacing: 0.5px;">Pillar 1</span>
+          <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 2px 0 0;">🏛️ Principal Desk</h3>
+        </div>
+        <span class="badge" style="background: #e0e7ff; color: #3730a3; font-weight: 800;">Campus & Facilities</span>
       </div>
-      <div id="topDeptBadge" style="font-size: 1.1rem; font-weight: 800; color: #1e1b4b;">
-        {% if current_user.role == 'hod' %}{{ current_user.department or 'Department' }}{% else %}Calculating...{% endif %}
-      </div>
-      <div style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">
-        Highest percentage of raised complaints
+      <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 0.75rem;">Wi-Fi, Hostel, Cleanliness, Food, Bus & Maintenance</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 0.75rem;">
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Total Received:</span>
+          <strong id="cardPrincipalTotal" style="font-size: 1.2rem; color: #1e1b4b;">--</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Solved Rate:</span>
+          <strong id="cardPrincipalSolved" style="font-size: 1.2rem; color: #059669;">--%</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Pending:</span>
+          <strong id="cardPrincipalPending" style="font-size: 1.2rem; color: #b45309;">--</strong>
+        </div>
       </div>
     </div>
 
-    <div class="card" style="border-left: 5px solid #0284c7; padding: 1.25rem;">
-      <div style="font-size: 0.78rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">
-        🎓 #1 Most Impacted Student Year:
+    <!-- Pillar 2: AO Desk Card -->
+    <div class="card" style="border-left: 5px solid #0284c7; padding: 1.25rem; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+        <div>
+          <span style="font-size: 0.75rem; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px;">Pillar 2</span>
+          <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 2px 0 0;">🏢 AO Administration</h3>
+        </div>
+        <span class="badge" style="background: #e0f2fe; color: #0369a1; font-weight: 800;">Admin & Finance</span>
       </div>
-      <div id="topYearBadge" style="font-size: 1.1rem; font-weight: 800; color: #0369a1;">
-        Calculating...
-      </div>
-      <div style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">
-        Academic year with highest problem volume
+      <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 0.75rem;">Fees, Receipts, Scholarships, Certificates & Admissions</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 0.75rem;">
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Total Received:</span>
+          <strong id="cardAoTotal" style="font-size: 1.2rem; color: #1e1b4b;">--</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Solved Rate:</span>
+          <strong id="cardAoSolved" style="font-size: 1.2rem; color: #059669;">--%</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Pending:</span>
+          <strong id="cardAoPending" style="font-size: 1.2rem; color: #b45309;">--</strong>
+        </div>
       </div>
     </div>
 
-    <div class="card" style="border-left: 5px solid #10b981; padding: 1.25rem;">
-      <div style="font-size: 0.78rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">
-        ⚡ Total Campus Queries Processed:
+    <!-- Pillar 3: HODs Academic Card -->
+    <div class="card" style="border-left: 5px solid #10b981; padding: 1.25rem; background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+        <div>
+          <span style="font-size: 0.75rem; font-weight: 800; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Pillar 3</span>
+          <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 2px 0 0;">🎓 Academic HODs</h3>
+        </div>
+        <span class="badge" style="background: #d1fae5; color: #065f46; font-weight: 800;">Degrees & Branches</span>
       </div>
-      <div id="totalQueriesBadge" style="font-size: 1.1rem; font-weight: 800; color: #065f46;">
-        Calculating...
-      </div>
-      <div style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">
-        Real-time database records
+      <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 0.75rem;">B.Tech, M.Tech, MCA, MBA & Marks/Attendance</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 0.75rem;">
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Total Academic:</span>
+          <strong id="cardHodTotal" style="font-size: 1.2rem; color: #1e1b4b;">--</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Solved Rate:</span>
+          <strong id="cardHodSolved" style="font-size: 1.2rem; color: #059669;">--%</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Unassigned:</span>
+          <strong id="cardHodUnassigned" style="font-size: 1.2rem; color: #be185d;">--</strong>
+        </div>
       </div>
     </div>
+
   </div>
 
-  <!-- Primary Pie Chart Grid -->
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.75rem; margin-bottom: 2rem;">
+  <!-- Interactive 3-Pillar Tab Switcher for Principal / Admin -->
+  <div style="display: flex; gap: 0.5rem; margin-bottom: 1.75rem; flex-wrap: wrap; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem;">
+    <button type="button" class="analytics-tab-btn active" data-tab="tab-principal" onclick="switchAnalyticsTab('tab-principal', this)">
+      🏛️ 1. Principal Desk Analysis
+    </button>
+    <button type="button" class="analytics-tab-btn" data-tab="tab-ao" onclick="switchAnalyticsTab('tab-ao', this)">
+      🏢 2. AO Administrative Analysis
+    </button>
+    <button type="button" class="analytics-tab-btn" data-tab="tab-hod" onclick="switchAnalyticsTab('tab-hod', this)">
+      🎓 3. Department HODs Analysis
+    </button>
+    <button type="button" class="analytics-tab-btn" data-tab="tab-campus" onclick="switchAnalyticsTab('tab-campus', this)">
+      🌐 4. Total Campus Overview
+    </button>
+  </div>
+  {% elif current_user.role == 'ao' %}
+  <!-- 2-Pillar Executive Summary Cards Banner (AO: 2 Pillars - AO Desk + Academic HODs) -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem; margin-bottom: 1.75rem;">
+    
+    <!-- Pillar 1: AO Desk Card (My Desk) -->
+    <div class="card" style="border-left: 5px solid #0284c7; padding: 1.25rem; background: linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+        <div>
+          <span style="font-size: 0.75rem; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px;">Pillar 1 (My Desk)</span>
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 2px 0 0;">🏢 AO Administrative Operations</h3>
+        </div>
+        <span class="badge" style="background: #e0f2fe; color: #0369a1; font-weight: 800;">Admin Desk</span>
+      </div>
+      <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.75rem;">Fee Payment, Receipts, Scholarships, Certificates & Office Queries</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #bae6fd; padding-top: 0.75rem;">
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Total Admin Queries:</span>
+          <strong id="cardAoTotal" style="font-size: 1.3rem; color: #1e1b4b;">--</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Solved Rate:</span>
+          <strong id="cardAoSolved" style="font-size: 1.3rem; color: #059669;">--%</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Pending:</span>
+          <strong id="cardAoPending" style="font-size: 1.3rem; color: #b45309;">--</strong>
+        </div>
+      </div>
+    </div>
 
-    <!-- 1. Pie Chart: Problems by Department -->
-    <div class="card" style="border-top: 5px solid #4f46e5; padding: 1.75rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
-        <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin: 0;">
-          🥧 1. Queries by Department (Where Problems Originate)
+    <!-- Pillar 2: Academic HODs Card -->
+    <div class="card" style="border-left: 5px solid #10b981; padding: 1.25rem; background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+        <div>
+          <span style="font-size: 0.75rem; font-weight: 800; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Pillar 2</span>
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 2px 0 0;">🎓 Academic HODs Status</h3>
+        </div>
+        <span class="badge" style="background: #d1fae5; color: #065f46; font-weight: 800;">Degrees & Branches</span>
+      </div>
+      <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.75rem;">B.Tech, M.Tech, MCA, MBA Programs, Labs & Marks Status</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #bbf7d0; padding-top: 0.75rem;">
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Total Academic:</span>
+          <strong id="cardHodTotal" style="font-size: 1.3rem; color: #1e1b4b;">--</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Solved Rate:</span>
+          <strong id="cardHodSolved" style="font-size: 1.3rem; color: #059669;">--%</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.72rem; color: #64748b; display: block;">Unassigned:</span>
+          <strong id="cardHodUnassigned" style="font-size: 1.3rem; color: #be185d;">--</strong>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Interactive 2-Pillar Tab Switcher for AO -->
+  <div style="display: flex; gap: 0.5rem; margin-bottom: 1.75rem; flex-wrap: wrap; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem;">
+    <button type="button" class="analytics-tab-btn active" data-tab="tab-ao" onclick="switchAnalyticsTab('tab-ao', this)">
+      🏢 1. AO Administrative Analysis (My Desk)
+    </button>
+    <button type="button" class="analytics-tab-btn" data-tab="tab-hod" onclick="switchAnalyticsTab('tab-hod', this)">
+      🎓 2. Department HODs Academic Status
+    </button>
+  </div>
+  {% endif %}
+
+  {% if current_user.role in ['principal', 'admin'] %}
+  <!-- ============================================================= -->
+  <!-- TAB 1: PRINCIPAL DESK ANALYSIS (THANAKI VACHINA QUERY ANALYSIS) -->
+  <!-- ============================================================= -->
+  <div id="tab-principal" class="tab-pane active">
+    
+    <div style="margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem;">
+        🏛️ Principal Desk (Campus Support & Infrastructure Analysis)
+      </h2>
+      <p style="font-size: 0.85rem; color: #64748b; margin: 0;">
+        Analysis of queries directly received by Principal's office: Campus maintenance, hostel food, Wi-Fi connectivity, cleanliness & general student grievances.
+      </p>
+    </div>
+
+    <!-- Principal KPI Tiles -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.75rem;">
+      <div class="card" style="border-left: 5px solid #4f46e5; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Received:</div>
+        <div id="pSummaryTotal" style="font-size: 1.5rem; font-weight: 800; color: #1e1b4b; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Campus Desk Tickets</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #10b981; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Resolved:</div>
+        <div id="pSummarySolved" style="font-size: 1.5rem; font-weight: 800; color: #065f46; margin-top: 4px;">--</div>
+        <div id="pSummarySolvedRate" style="font-size: 0.72rem; color: #059669; font-weight: 700; margin-top: 2px;">--% Rate</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #f59e0b; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">In Progress:</div>
+        <div id="pSummaryPending" style="font-size: 1.5rem; font-weight: 800; color: #b45309; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Active resolution</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #ef4444; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Urgent / Critical:</div>
+        <div id="pSummaryUrgent" style="font-size: 1.5rem; font-weight: 800; color: #b91c1c; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #ef4444; margin-top: 2px;">High Priority Issues</div>
+      </div>
+    </div>
+
+    <!-- Principal Charts Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+      <!-- Topics Breakdown -->
+      <div class="card" style="border-top: 5px solid #4f46e5; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          🥧 Campus Problem Topics Distribution
         </h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+          Breakdown of Wi-Fi, Food, Cleanliness, Electrical, Transport & Maintenance complaints.
+        </p>
+        <div style="height: 280px; position: relative;">
+          <canvas id="pTopicChart"></canvas>
+        </div>
       </div>
-      <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-        Pie chart breakdown showing the volume and percentage of issues raised per department (e.g. CSE, ECE, ME, Civil, Administrative, Others).
-      </p>
-      <div style="height: 310px; position: relative;">
-        <canvas id="deptPieChart"></canvas>
-      </div>
-    </div>
 
-    <!-- 2. Pie Chart: Problems by Student Year of Study -->
-    <div class="card" style="border-top: 5px solid #0284c7; padding: 1.75rem;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
-        <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin: 0;">
-          🥧 2. Queries by Student Year of Study
+      <!-- Status & Priority Breakdown -->
+      <div class="card" style="border-top: 5px solid #10b981; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          📊 Status Lifecycle & Priority Urgency
         </h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+          Resolution stages and priority levels for Principal Desk tickets.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; height: 280px;">
+          <div style="height: 100%; position: relative;">
+            <canvas id="pStatusChart"></canvas>
+          </div>
+          <div style="height: 100%; position: relative;">
+            <canvas id="pPriorityChart"></canvas>
+          </div>
+        </div>
       </div>
-      <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.25rem;">
-        Pie chart breakdown showing which academic year (1st, 2nd, 3rd, 4th Year, Faculty) files the most issues.
+    </div>
+
+  </div>
+  {% endif %}
+
+  <!-- ============================================================= -->
+  <!-- TAB 2: AO ADMINISTRATIVE ANALYSIS -->
+  <!-- ============================================================= -->
+  <div id="tab-ao" class="tab-pane {% if current_user.role == 'ao' %}active{% endif %}">
+    
+    <div style="margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem;">
+        🏢 Administrative Officer (AO) Analysis
+      </h2>
+      <p style="font-size: 0.85rem; color: #64748b; margin: 0;">
+        Analysis of Administrative Office queries: Fee payments & receipts, scholarship processing, bonafide & transfer certificates, ID cards, and permissions.
       </p>
-      <div style="height: 310px; position: relative;">
-        <canvas id="yearPieChart"></canvas>
+    </div>
+
+    <!-- AO KPI Tiles -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.75rem;">
+      <div class="card" style="border-left: 5px solid #0284c7; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Admin Queries:</div>
+        <div id="aoSummaryTotal" style="font-size: 1.5rem; font-weight: 800; color: #1e1b4b; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Administrative Tickets</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #10b981; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Resolved:</div>
+        <div id="aoSummarySolved" style="font-size: 1.5rem; font-weight: 800; color: #065f46; margin-top: 4px;">--</div>
+        <div id="aoSummarySolvedRate" style="font-size: 0.72rem; color: #059669; font-weight: 700; margin-top: 2px;">--% Rate</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #f59e0b; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">In Progress:</div>
+        <div id="aoSummaryPending" style="font-size: 1.5rem; font-weight: 800; color: #b45309; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Under processing</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #ef4444; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Urgent:</div>
+        <div id="aoSummaryUrgent" style="font-size: 1.5rem; font-weight: 800; color: #b91c1c; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #ef4444; margin-top: 2px;">Fees / Dues Deadlines</div>
+      </div>
+    </div>
+
+    <!-- AO Charts Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+      <!-- Administrative Topics Breakdown -->
+      <div class="card" style="border-top: 5px solid #0284c7; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          🥧 Administrative Services Distribution
+        </h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+          Breakdown of Fee receipts, Scholarships, Certificates, ID Cards & Admissions.
+        </p>
+        <div style="height: 280px; position: relative;">
+          <canvas id="aoTopicChart"></canvas>
+        </div>
+      </div>
+
+      <!-- AO Status & Student Year Breakdown -->
+      <div class="card" style="border-top: 5px solid #10b981; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          📊 Status Lifecycle & Submitter Profile
+        </h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+          Resolution progress and breakdown of student years requesting administrative support.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; height: 280px;">
+          <div style="height: 100%; position: relative;">
+            <canvas id="aoStatusChart"></canvas>
+          </div>
+          <div style="height: 100%; position: relative;">
+            <canvas id="aoYearChart"></canvas>
+          </div>
+        </div>
       </div>
     </div>
 
   </div>
 
-  <!-- Secondary Charts Grid -->
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-
-    <!-- 3. Category Distribution -->
-    <div class="card" style="border-top: 4px solid #f59e0b;">
-      <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--text-main);">
-        📊 3. Core Wing Category Distribution
-      </h3>
-      <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
-        Academics vs Administrative vs Others
+  <!-- ============================================================= -->
+  <!-- TAB 3: HODs ACADEMIC DEPARTMENTS ANALYSIS -->
+  <!-- ============================================================= -->
+  <div id="tab-hod" class="tab-pane">
+    
+    <div style="margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem;">
+        🎓 Department HODs Academic Analysis
+      </h2>
+      <p style="font-size: 0.85rem; color: #64748b; margin: 0;">
+        Degree & Program-wise academic performance tracking: B.Tech CSE vs M.Tech CSE vs MCA vs MBA HODs, internal marks, attendance, labs & syllabus issues.
       </p>
-      <div style="height: 240px; position: relative;">
-        <canvas id="catChart"></canvas>
+    </div>
+
+    <!-- HOD KPI Tiles -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.75rem;">
+      <div class="card" style="border-left: 5px solid #10b981; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Academic Queries:</div>
+        <div id="hodSummaryTotal" style="font-size: 1.5rem; font-weight: 800; color: #1e1b4b; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Branch & Lab Tickets</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #059669; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Resolved by HODs:</div>
+        <div id="hodSummarySolved" style="font-size: 1.5rem; font-weight: 800; color: #065f46; margin-top: 4px;">--</div>
+        <div id="hodSummarySolvedRate" style="font-size: 0.72rem; color: #059669; font-weight: 700; margin-top: 2px;">--% Rate</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #f59e0b; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">In Progress / Assigned:</div>
+        <div id="hodSummaryPending" style="font-size: 1.5rem; font-weight: 800; color: #b45309; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">With Staff Resolvers</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #ec4899; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Unassigned Backlog:</div>
+        <div id="hodSummaryUnassigned" style="font-size: 1.5rem; font-weight: 800; color: #be185d; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #ec4899; margin-top: 2px;">Awaiting HOD action</div>
       </div>
     </div>
 
-    <!-- 4. Lifecycle Status Breakdown -->
-    <div class="card" style="border-top: 4px solid #10b981;">
-      <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--text-main);">
-        ✅ 4. Resolution Status Lifecycle
-      </h3>
-      <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
-        Resolved vs In Progress vs Assigned vs New
-      </p>
-      <div style="height: 240px; position: relative;">
-        <canvas id="statusChart"></canvas>
+    <!-- HOD Charts Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+      <!-- Degree & Branch Distribution -->
+      <div class="card" style="border-top: 5px solid #10b981; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          🥧 Academic Degree & Branch Distribution
+        </h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+          B.Tech vs M.Tech vs MCA vs MBA program volume breakdown.
+        </p>
+        <div style="height: 280px; position: relative;">
+          <canvas id="hodDegreeChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Academic Topics Breakdown -->
+      <div class="card" style="border-top: 5px solid #8b5cf6; padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          📊 Academic Issues Distribution
+        </h3>
+        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
+          Exams, Internal Marks, Attendance, Practical Labs, Syllabus & Projects.
+        </p>
+        <div style="height: 280px; position: relative;">
+          <canvas id="hodTopicChart"></canvas>
+        </div>
       </div>
     </div>
 
-    <!-- 5. Urgency & Priority Breakdown -->
-    <div class="card" style="border-top: 4px solid #ef4444;">
-      <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--text-main);">
-        🚨 5. Priority & Urgency Levels
-      </h3>
-      <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">
-        Urgent vs High vs Medium vs Low
-      </p>
-      <div style="height: 240px; position: relative;">
-        <canvas id="priorityChart"></canvas>
+    <!-- HOD Performance Comparison Matrix Table -->
+    <div class="card" style="margin-bottom: 2.5rem;">
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <div>
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0;">
+            📋 HOD & Degree Program Performance Scorecard
+          </h3>
+          <p style="font-size: 0.8rem; color: #64748b; margin: 0;">
+            Resolution performance and unassigned tickets backlog comparison per Head of Department.
+          </p>
+        </div>
+        <a href="{{ url_for('admin_communicate_hod') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
+          💬 Message HOD
+        </a>
+      </div>
+
+      <div class="table-container">
+        <table class="table" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left; font-size: 0.82rem;">
+              <th style="padding: 0.85rem 1rem;">Degree / Branch</th>
+              <th style="padding: 0.85rem 1rem;">Head of Department (HOD)</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">Total Queries</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">Resolved</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">Resolution %</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">Pending</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">Unassigned</th>
+            </tr>
+          </thead>
+          <tbody id="hodPerformanceTableBody" style="font-size: 0.88rem;">
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 2rem; color: #64748b;">
+                ⏳ Loading HOD performance metrics...
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
   </div>
 
-  <!-- 6. Department × Year Cross-Matrix Breakdown Table (Central Admin Only) -->
-  {% if current_user.role == 'admin' %}
-  <div class="card" style="margin-bottom: 2.5rem;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-      <div>
+  {% if current_user.role in ['principal', 'admin'] %}
+  <!-- ============================================================= -->
+  <!-- TAB 4: TOTAL CAMPUS OVERVIEW & CROSS MATRIX -->
+  <!-- ============================================================= -->
+  <div id="tab-campus" class="tab-pane">
+    
+    <div style="margin-bottom: 1.25rem;">
+      <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem;">
+        🌐 Campus-Wide Global Overview & Cross Matrix
+      </h2>
+      <p style="font-size: 0.85rem; color: #64748b; margin: 0;">
+        Overall college-wide statistical charts tracking issue volumes across all branches and student study years.
+      </p>
+    </div>
+
+    <!-- Campus KPI Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.75rem;">
+      <div class="card" style="border-left: 5px solid #4f46e5; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total College Queries:</div>
+        <div id="summaryTotal" style="font-size: 1.5rem; font-weight: 800; color: #1e1b4b; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">All wings & branches</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #10b981; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Solved / Resolved:</div>
+        <div id="summarySolved" style="font-size: 1.5rem; font-weight: 800; color: #065f46; margin-top: 4px;">--</div>
+        <div id="summarySolvedPercent" style="font-size: 0.72rem; color: #059669; font-weight: 700; margin-top: 2px;">0% Rate</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #f59e0b; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Pending / In Progress:</div>
+        <div id="summaryPending" style="font-size: 1.5rem; font-weight: 800; color: #b45309; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Active investigations</div>
+      </div>
+      <div class="card" style="border-left: 5px solid #ec4899; padding: 1.2rem;">
+        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Unassigned / New:</div>
+        <div id="summaryUnassigned" style="font-size: 1.5rem; font-weight: 800; color: #be185d; margin-top: 4px;">--</div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Awaiting assignment</div>
+      </div>
+    </div>
+
+    <!-- Campus Primary Pie Charts -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 1.75rem; margin-bottom: 2rem;">
+      <div class="card" style="border-top: 5px solid #4f46e5; padding: 1.75rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          🥧 Queries by Department / Wing
+        </h3>
+        <p style="font-size: 0.82rem; color: #64748b; margin-bottom: 1.25rem;">
+          Pie chart showing where problems originate across campus.
+        </p>
+        <div style="height: 300px; position: relative;">
+          <canvas id="deptPieChart"></canvas>
+        </div>
+      </div>
+
+      <div class="card" style="border-top: 5px solid #0284c7; padding: 1.75rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0 0 0.5rem;">
+          🥧 Queries by Student Year of Study
+        </h3>
+        <p style="font-size: 0.82rem; color: #64748b; margin-bottom: 1.25rem;">
+          Pie chart showing which year files the most queries.
+        </p>
+        <div style="height: 300px; position: relative;">
+          <canvas id="yearPieChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Department × Year Cross-Matrix Breakdown Table -->
+    <div class="card" style="margin-bottom: 2.5rem;">
+      <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0;">
         <h3 style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0;">
           📋 Department × Student Year Problem Cross-Matrix
         </h3>
-        <p style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">
-          Detailed breakdown table showing issue counts across each Year of Study per Department.
+        <p style="font-size: 0.82rem; color: #64748b; margin: 0;">
+          Cross-breakdown table showing issue counts across each Year of Study per Department.
         </p>
+      </div>
+
+      <div class="table-container">
+        <table class="table" style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left; font-size: 0.82rem;">
+              <th style="padding: 0.85rem 1rem;">Department / Wing</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">1st Year</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">2nd Year</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">3rd Year</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">4th Year</th>
+              <th style="padding: 0.85rem 1rem; text-align: center;">Faculty</th>
+              <th style="padding: 0.85rem 1rem; text-align: center; font-weight: 800; color: #4f46e5;">Total Issues</th>
+            </tr>
+          </thead>
+          <tbody id="matrixTableBody" style="font-size: 0.88rem;">
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 2rem; color: #64748b;">
+                ⏳ Loading cross-matrix data...
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <div class="table-container">
-      <table class="table" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left; font-size: 0.82rem;">
-            <th style="padding: 0.85rem 1rem;">Department / Wing</th>
-            <th style="padding: 0.85rem 1rem; text-align: center;">1st Year</th>
-            <th style="padding: 0.85rem 1rem; text-align: center;">2nd Year</th>
-            <th style="padding: 0.85rem 1rem; text-align: center;">3rd Year</th>
-            <th style="padding: 0.85rem 1rem; text-align: center;">4th Year</th>
-            <th style="padding: 0.85rem 1rem; text-align: center;">Faculty</th>
-            <th style="padding: 0.85rem 1rem; text-align: center; font-weight: 800; color: #4f46e5;">Total Issues</th>
-          </tr>
-        </thead>
-        <tbody id="matrixTableBody" style="font-size: 0.88rem;">
-          <tr>
-            <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">
-              ⏳ Loading cross-matrix data...
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
   </div>
   {% endif %}
 

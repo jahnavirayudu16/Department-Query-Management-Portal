@@ -1,230 +1,210 @@
 {% extends 'base.html' %}
 
-{% block title %}Register Account | Department Query Management Portal{% endblock %}
+{% block title %}Faculty & Staff Registration | Department Query Management Portal{% endblock %}
 
 {% block content %}
-<div style="max-width: 640px; margin: 1.5rem auto;">
+<div style="max-width: 640px; margin: 1.5rem auto 3rem;">
+  
+  <!-- Faculty Query Direct Post Banner -->
+  <div style="background: #eef2ff; border: 1.5px dashed #6366f1; border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <span style="font-size: 1.75rem;">👩‍🏫</span>
+      <div>
+        <strong style="font-size: 0.95rem; color: #1e1b4b; display: block;">Need to Post a Faculty Query?</strong>
+        <span style="font-size: 0.82rem; color: #4338ca;">Faculty members can submit departmental, teaching, or administrative issues directly!</span>
+      </div>
+    </div>
+    <a href="{{ url_for('submit_query', type='faculty') }}" class="btn btn-primary btn-sm" style="font-weight: 700; white-space: nowrap;">
+      ✍️ Post Faculty Query →
+    </a>
+  </div>
+
   <div class="card" style="padding: 2.25rem; background: #ffffff; border: 1px solid var(--border-color); box-shadow: var(--shadow-md);">
     <div style="text-align: center; margin-bottom: 1.5rem;">
-      <div class="sidebar-logo" style="margin: 0 auto 0.75rem; width: 48px; height: 48px; font-size: 1.4rem;">📝</div>
-      <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main);">Create Your Account</h2>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
-        Select your role below to complete your registration
+      <div class="sidebar-logo" style="margin: 0 auto 0.75rem; width: 48px; height: 48px; font-size: 1.4rem;">👩‍🏫</div>
+      <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-main); margin: 0 0 0.25rem;">Faculty & Staff Registration</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+        Register your official portal account to manage, review, and resolve department queries.
       </p>
     </div>
 
     <form method="POST" action="{{ url_for('register') }}">
       
-      <!-- Primary Role Switcher: Student vs Faculty -->
-      <div class="form-group">
-        <label class="form-label" style="font-weight: 800;">Register As *</label>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-          <label id="roleStudentCard" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.85rem 0.5rem; border: 2px solid var(--primary); border-radius: var(--radius-md); cursor: pointer; background: #eef2ff; text-align: center; transition: all 0.2s;">
-            <input type="radio" name="role" value="student" checked onchange="handleRoleChange('student')" style="accent-color: var(--primary);">
-            <span style="font-weight: 800; font-size: 0.95rem; color: #1e1b4b;">👨‍🎓 Student</span>
+      <!-- Role Selection Cards -->
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label class="form-label" style="font-weight: 800; font-size: 0.9rem;">Register Role *</label>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
+          
+          <!-- 1. Staff -->
+          <label id="roleCardStaff" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; padding: 0.75rem 0.25rem; border: 2px solid var(--primary); border-radius: var(--radius-md); cursor: pointer; background: #eef2ff; text-align: center; transition: all 0.2s;">
+            <input type="radio" name="faculty_role_type" value="staff" checked onchange="onRoleSelect('staff')" style="display: none;">
+            <span style="font-size: 1.3rem;">👩‍🏫</span>
+            <span style="font-weight: 800; font-size: 0.82rem; color: #1e1b4b;">Staff</span>
+            <span style="font-size: 0.68rem; color: #64748b;">Dept Resolver</span>
           </label>
-          <label id="roleFacultyCard" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.85rem 0.5rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; background: #f8fafc; text-align: center; transition: all 0.2s;">
-            <input type="radio" name="role" value="faculty" onchange="handleRoleChange('faculty')" style="accent-color: var(--primary);">
-            <span style="font-weight: 800; font-size: 0.95rem; color: #0f172a;">👩‍🏫 Faculty</span>
+
+          <!-- 2. HOD -->
+          <label id="roleCardHod" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; padding: 0.75rem 0.25rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; background: #f8fafc; text-align: center; transition: all 0.2s;">
+            <input type="radio" name="faculty_role_type" value="hod" onchange="onRoleSelect('hod')" style="display: none;">
+            <span style="font-size: 1.3rem;">🎓</span>
+            <span style="font-weight: 800; font-size: 0.82rem; color: #0f172a;">HOD</span>
+            <span style="font-size: 0.68rem; color: #64748b;">Head of Dept</span>
           </label>
+
+          <!-- 3. AO / Office Staff -->
+          <label id="roleCardAo" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; padding: 0.75rem 0.25rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; background: #f8fafc; text-align: center; transition: all 0.2s;">
+            <input type="radio" name="faculty_role_type" value="ao" onchange="onRoleSelect('ao')" style="display: none;">
+            <span style="font-size: 1.3rem;">🏢</span>
+            <span style="font-weight: 800; font-size: 0.82rem; color: #0f172a;">AO / Staff</span>
+            <span style="font-size: 0.68rem; color: #64748b;">Administration</span>
+          </label>
+
+          <!-- 4. Principal -->
+          <label id="roleCardPrincipal" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; padding: 0.75rem 0.25rem; border: 2px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; background: #f8fafc; text-align: center; transition: all 0.2s;">
+            <input type="radio" name="faculty_role_type" value="principal" onchange="onRoleSelect('principal')" style="display: none;">
+            <span style="font-size: 1.3rem;">🏛️</span>
+            <span style="font-weight: 800; font-size: 0.82rem; color: #0f172a;">Principal</span>
+            <span style="font-size: 0.68rem; color: #64748b;">College Head</span>
+          </label>
+
+        </div>
+
+        <!-- AO vs Office Staff Sub-Choice Option (Shown when AO / Staff is selected) -->
+        <div id="aoSubOptionSection" style="display: none; margin-top: 0.75rem; background: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: var(--radius-md); padding: 0.85rem 1rem;">
+          <div style="font-size: 0.78rem; font-weight: 800; color: #0369a1; text-transform: uppercase; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+            <span>🏢</span> Select Administration Role:
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <label id="subOptionAoCard" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; background: #ffffff; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm); border: 2px solid #0284c7; font-size: 0.85rem; font-weight: 700; color: #0c4a6e;">
+              <input type="radio" name="ao_sub_type" value="ao" checked onchange="setAdminSubRole('ao')">
+              <div>
+                <strong style="display: block;">🏢 Administrative Officer (AO)</strong>
+                <span style="font-size: 0.7rem; color: #64748b; font-weight: 500;">Head of Administration</span>
+              </div>
+            </label>
+            <label id="subOptionStaffCard" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; background: #ffffff; padding: 0.6rem 0.75rem; border-radius: var(--radius-sm); border: 1.5px solid #cbd5e1; font-size: 0.85rem; font-weight: 700; color: #0c4a6e;">
+              <input type="radio" name="ao_sub_type" value="office_staff" onchange="setAdminSubRole('office_staff')">
+              <div>
+                <strong style="display: block;">💼 Office Staff</strong>
+                <span style="font-size: 0.7rem; color: #64748b; font-weight: 500;">Administrative Resolver</span>
+              </div>
+            </label>
+          </div>
+          <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #0369a1;">
+            ✨ Administrative & Office Staff accounts are registered directly with name, email & password. No department/course selection needed.
+          </div>
         </div>
       </div>
 
-      <!-- Account Email & Passwords -->
+      <!-- Full Name & Phone -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
         <div class="form-group">
-          <label for="nameInput" class="form-label">Full Name <span id="nameOptionalBadge" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">(Optional for Students)</span></label>
-          <input type="text" id="nameInput" name="name" class="form-control" placeholder="Your Name">
+          <label for="nameInput" class="form-label" style="font-weight: 700;">Full Name *</label>
+          <input type="text" id="nameInput" name="name" class="form-control" placeholder="Dr. / Prof. / Mr. / Ms. Name" required>
         </div>
         
-        <div class="form-group" id="regdIdGroup">
-          <label for="rollNoInput" class="form-label">Registration / Roll No <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">(Optional)</span></label>
-          <input type="text" id="rollNoInput" name="roll_no" class="form-control" placeholder="e.g. 21B91A0501">
+        <div class="form-group">
+          <label for="phoneInput" class="form-label" style="font-weight: 700;">Phone Number <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional)</span></label>
+          <input type="text" id="phoneInput" name="phone" class="form-control" placeholder="e.g. 9876543210">
         </div>
       </div>
 
+      <!-- College Email Address -->
       <div class="form-group">
-        <label for="email" class="form-label">College Email Address *</label>
-        <input type="email" id="email" name="email" class="form-control" placeholder="user@college.com" required>
+        <label for="email" class="form-label" style="font-weight: 700;">Official College Email Address *</label>
+        <input type="email" id="email" name="email" class="form-control" placeholder="staff@college.com" required>
       </div>
 
+      <!-- Password & Confirm Password -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
         <div class="form-group">
-          <label for="password" class="form-label">Password *</label>
+          <label for="password" class="form-label" style="font-weight: 700;">Password *</label>
           <input type="password" id="password" name="password" class="form-control" placeholder="Min. 6 characters" required minlength="6">
         </div>
         <div class="form-group">
-          <label for="confirm_password" class="form-label">Confirm Password *</label>
+          <label for="confirm_password" class="form-label" style="font-weight: 700;">Confirm Password *</label>
           <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="Re-enter password" required minlength="6">
         </div>
       </div>
 
-      <!-- STUDENT ACADEMIC FIELDS (Cascade Level -> Program -> Branch -> Year) -->
-      <div id="studentAcademicFields">
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem;">
-          <div style="font-size: 0.8rem; font-weight: 800; color: #4338ca; text-transform: uppercase; margin-bottom: 0.75rem;">
-            🎓 Student Academic Information
-          </div>
+      <!-- ACADEMIC & DEPARTMENT SELECTION SECTION (Shown for Staff and HOD) -->
+      <div id="academicDepartmentFields" style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem;">
+        <div style="font-size: 0.82rem; font-weight: 800; color: #4338ca; text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;">
+          <span>🏢</span> Department & Academic Specialization
+        </div>
 
-          <!-- Level (UG / PG / Diploma) -->
-          <div class="form-group">
-            <label for="levelSelect" class="form-label" style="font-weight: 700;">Academic Level *</label>
-            <select id="levelSelect" name="level" class="form-control" onchange="onLevelChange()">
-              <option value="UG">Undergraduate (UG)</option>
-              <option value="PG">Postgraduate (PG)</option>
-              <option value="Diploma">Diploma (Polytechnic)</option>
-            </select>
-          </div>
+        <!-- Academic Level (UG / PG / Diploma) -->
+        <div class="form-group">
+          <label for="facLevelSelect" class="form-label" style="font-weight: 700;">Academic Level *</label>
+          <select id="facLevelSelect" name="fac_level" class="form-control" onchange="onFacLevelChange()" style="font-weight: 600;">
+            <option value="UG" selected>Undergraduate (UG)</option>
+            <option value="PG">Postgraduate (PG)</option>
+            <option value="Diploma">Diploma (Polytechnic)</option>
+          </select>
+        </div>
 
-          <!-- Program (B.Tech, Degree, M.Tech, MCA, MBA, Diploma, etc.) -->
-          <div class="form-group">
-            <label for="programSelect" class="form-label" style="font-weight: 700;">Degree Program / Course *</label>
-            <select id="programSelect" name="course" class="form-control" onchange="onProgramChange()">
-              <!-- Populated dynamically based on level -->
-            </select>
-          </div>
+        <!-- Program / Course -->
+        <div class="form-group">
+          <label for="facProgramSelect" class="form-label" style="font-weight: 700;">Degree Program / Course *</label>
+          <select id="facProgramSelect" name="fac_course" class="form-control" onchange="onFacProgramChange()" style="font-weight: 600;">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
 
-          <!-- Branch / Department -->
-          <div class="form-group">
-            <label for="branchSelect" class="form-label" style="font-weight: 700;">Branch / Department Specialization *</label>
-            <select id="branchSelect" name="department" class="form-control">
-              <!-- Populated dynamically based on program -->
-            </select>
-          </div>
+        <!-- Department / Branch -->
+        <div class="form-group">
+          <label for="facBranchSelect" class="form-label" style="font-weight: 700;">Department / Branch *</label>
+          <select id="facBranchSelect" name="fac_department" class="form-control" style="font-weight: 600;">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
 
-          <!-- Year of Study -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="yearSelect" class="form-label" style="font-weight: 700;">Current Year of Study *</label>
-            <select id="yearSelect" name="year" class="form-control">
-              <!-- Populated dynamically based on program duration -->
-            </select>
-          </div>
+        <!-- Designation / Title -->
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="designationInput" class="form-label" style="font-weight: 700;">Official Designation <span style="font-size: 0.72rem; color: var(--text-muted);">(Optional)</span></label>
+          <input type="text" id="designationInput" name="designation" class="form-control" placeholder="e.g. Assistant Professor, Associate Professor, Head of Department">
         </div>
       </div>
 
-      <!-- FACULTY / HOD / ADMIN SPECIFIC SECTION -->
-      <div id="facultySpecificFields" style="display: none;">
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem;">
-          <div style="font-size: 0.8rem; font-weight: 800; color: #7c3aed; text-transform: uppercase; margin-bottom: 0.75rem;">
-            👩‍🏫 Faculty & Administration Role
-          </div>
-
-          <!-- Faculty Sub-Role (Faculty / HOD / Admin) -->
-          <div class="form-group">
-            <label class="form-label" style="font-weight: 700;">Select Designation / Role *</label>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
-              <label style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.6rem 0.35rem; border: 1px solid #cbd5e1; border-radius: var(--radius-sm); cursor: pointer; background: #ffffff; text-align: center; font-size: 0.82rem;">
-                <input type="radio" name="faculty_role_type" value="faculty" checked onchange="onFacultyRoleTypeChange('faculty')">
-                <span style="font-weight: 700;">Faculty</span>
-              </label>
-              <label style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.6rem 0.35rem; border: 1px solid #cbd5e1; border-radius: var(--radius-sm); cursor: pointer; background: #ffffff; text-align: center; font-size: 0.82rem;">
-                <input type="radio" name="faculty_role_type" value="hod" onchange="onFacultyRoleTypeChange('hod')">
-                <span style="font-weight: 700;">Dept HOD</span>
-              </label>
-              <label style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.6rem 0.35rem; border: 1px solid #cbd5e1; border-radius: var(--radius-sm); cursor: pointer; background: #ffffff; text-align: center; font-size: 0.82rem;">
-                <input type="radio" name="faculty_role_type" value="admin" onchange="onFacultyRoleTypeChange('admin')">
-                <span style="font-weight: 700;">Central Admin</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Category Wing Selector for Faculty -->
-          <div id="facultyCategoryGroup" class="form-group">
-            <label for="facultyCategorySelect" class="form-label" style="font-weight: 700;">Assigned Wing / Department *</label>
-            <select id="facultyCategorySelect" name="faculty_category" class="form-control" onchange="onFacultyCategoryChange()">
-              <option value="Academics">Academics (Teaching / Engineering / Science / Management)</option>
-              <option value="Administrative">Administrative (Accounts / Fee / Certificates / Admissions)</option>
-              <option value="Others">Others (Hostel / Transport / Infrastructure / Amenities)</option>
-            </select>
-          </div>
-
-          <!-- Academic Branch Cascade for Faculty (Academics) & HOD -->
-          <div id="facultyAcademicCascadeGroup">
-            <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1rem;">
-              <div style="font-size: 0.75rem; font-weight: 800; color: #4338ca; text-transform: uppercase; margin-bottom: 0.5rem;">
-                🏢 Academic Branch Assignment
-              </div>
-              
-              <div class="form-group">
-                <label for="facLevelSelect" class="form-label" style="font-weight: 700; font-size: 0.85rem;">Academic Level *</label>
-                <select id="facLevelSelect" name="fac_level" class="form-control" onchange="onFacLevelChange()">
-                  <option value="UG">Undergraduate (UG)</option>
-                  <option value="PG">Postgraduate (PG)</option>
-                  <option value="Diploma">Diploma (Polytechnic)</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label for="facProgramSelect" class="form-label" style="font-weight: 700; font-size: 0.85rem;">Degree Program / Course *</label>
-                <select id="facProgramSelect" name="fac_course" class="form-control" onchange="onFacProgramChange()">
-                  <!-- Populated dynamically -->
-                </select>
-              </div>
-
-              <div class="form-group" style="margin-bottom: 0;">
-                <label for="facBranchSelect" class="form-label" style="font-weight: 700; font-size: 0.85rem;">Branch / Department *</label>
-                <select id="facBranchSelect" name="fac_department" class="form-control">
-                  <!-- Populated dynamically -->
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Designation -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label for="designationInput" class="form-label" style="font-weight: 700;">Designation / Title</label>
-            <input type="text" id="designationInput" name="designation" class="form-control" placeholder="e.g. Assistant Professor, Associate Professor, HOD">
-          </div>
-        </div>
-      </div>
-
-      <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 0.5rem; font-weight: 800;">
+      <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 0.5rem; font-weight: 800; box-shadow: var(--shadow-sm);">
         Complete Registration →
       </button>
     </form>
 
-    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-muted);">
-      Already have an account? <a href="{{ url_for('login') }}" style="font-weight: 700;">Sign in here</a>
+    <div style="text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 1rem;">
+      Already have an official account? <a href="{{ url_for('login') }}" style="font-weight: 700; color: var(--primary);">Sign in here</a>
     </div>
   </div>
 </div>
 
 <script>
-// Comprehensive Academic Hierarchy with all expanded degrees & branches
 const academicHierarchy = {
   'UG': {
-    programs: ['B.Tech', 'Degree'],
+    programs: ['B.Tech', 'Degree (B.Sc / BCA / B.Com / BBA)'],
     details: {
       'B.Tech': {
-        years: [1, 2, 3, 4],
         branches: [
           'Computer Science & Engineering (CSE)',
           'Information Technology (IT)',
-          'Artificial Intelligence & Data Science (AIDS)',
+          'Artificial Intelligence & Data Science (AI&DS)',
           'Artificial Intelligence & Machine Learning (AIML)',
           'Electronics & Communication Engineering (ECE)',
-          'Civil Engineering (Civil)',
           'Electrical & Electronics Engineering (EEE)',
           'Mechanical Engineering (Mech)',
+          'Civil Engineering (Civil)',
           'Chemical Engineering',
-          'Biotechnology Engineering',
-          'Agricultural Engineering',
-          'Automobile Engineering',
-          'Aerospace Engineering'
+          'Biotechnology Engineering'
         ]
       },
-      'Degree': {
-        years: [1, 2, 3],
+      'Degree (B.Sc / BCA / B.Com / BBA)': {
         branches: [
           'Bachelor of Computer Applications (BCA)',
           'B.Sc (Computer Science)',
           'B.Sc (Data Science)',
-          'B.Sc (Mathematics, Physics, Chemistry - MPC)',
-          'B.Sc (Biotechnology / Microbiology)',
-          'B.Com (General)',
+          'B.Sc (Mathematics & Physics)',
           'B.Com (Computer Applications)',
           'Bachelor of Business Administration (BBA)',
-          'B.A (Economics / Literature / History)'
+          'Science & Humanities (S&H)'
         ]
       }
     }
@@ -233,111 +213,49 @@ const academicHierarchy = {
     programs: ['M.Tech', 'MCA', 'MBA', 'M.Sc'],
     details: {
       'M.Tech': {
-        years: [1, 2],
         branches: [
-          'M.Tech (Computer Science & Engineering)',
-          'M.Tech (VLSI & Embedded Systems)',
-          'M.Tech (Data Science & AI)',
-          'M.Tech (Power Electronics & Drives)',
-          'M.Tech (CAD / CAM Robotics)',
-          'M.Tech (Structural Engineering)'
+          'Computer Science & Engineering (CSE)',
+          'VLSI & Embedded Systems',
+          'Power Electronics & Drives',
+          'CAD / CAM Robotics',
+          'Structural Engineering'
         ]
       },
       'MCA': {
-        years: [1, 2],
         branches: [
-          'Master of Computer Applications (MCA - Regular)',
-          'MCA (Data Analytics & Cloud Systems)',
-          'MCA (Artificial Intelligence)'
+          'Master of Computer Applications (MCA)'
         ]
       },
       'MBA': {
-        years: [1, 2],
         branches: [
-          'MBA (Finance Management)',
-          'MBA (Marketing Management)',
-          'MBA (Human Resource Management - HR)',
-          'MBA (Business Analytics)',
-          'MBA (Operations & Supply Chain)',
-          'MBA (Hospital & Healthcare Management)'
+          'Master of Business Administration (MBA)'
         ]
       },
       'M.Sc': {
-        years: [1, 2],
         branches: [
           'M.Sc (Computer Science)',
-          'M.Sc (Data Science & Analytics)',
-          'M.Sc (Organic Chemistry)',
-          'M.Sc (Applied Mathematics)',
-          'M.Sc (Biotechnology)'
+          'M.Sc (Data Science)',
+          'M.Sc (Chemistry / Physics / Maths)'
         ]
       }
     }
   },
   'Diploma': {
-    programs: ['Diploma (Polytechnic)'],
+    programs: ['Polytechnic Diploma'],
     details: {
-      'Diploma (Polytechnic)': {
-        years: [1, 2, 3],
+      'Polytechnic Diploma': {
         branches: [
           'Diploma in Computer Engineering (DCME)',
           'Diploma in Electronics & Communication (DECE)',
           'Diploma in Electrical & Electronics (DEEE)',
           'Diploma in Mechanical Engineering (DME)',
-          'Diploma in Civil Engineering (DCE)',
-          'Diploma in Automobile Engineering'
+          'Diploma in Civil Engineering (DCE)'
         ]
       }
     }
   }
 };
 
-// Student Cascade logic
-function onLevelChange() {
-  const level = document.getElementById('levelSelect').value;
-  const programSelect = document.getElementById('programSelect');
-  const levelData = academicHierarchy[level] || academicHierarchy['UG'];
-  
-  programSelect.innerHTML = '';
-  levelData.programs.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p;
-    opt.textContent = p;
-    programSelect.appendChild(opt);
-  });
-  
-  onProgramChange();
-}
-
-function onProgramChange() {
-  const level = document.getElementById('levelSelect').value;
-  const program = document.getElementById('programSelect').value;
-  const levelData = academicHierarchy[level] || academicHierarchy['UG'];
-  const programData = levelData.details[program] || levelData.details[levelData.programs[0]];
-  
-  const branchSelect = document.getElementById('branchSelect');
-  const yearSelect = document.getElementById('yearSelect');
-  
-  // Populate Branches
-  branchSelect.innerHTML = '';
-  programData.branches.forEach(b => {
-    const opt = document.createElement('option');
-    opt.value = b;
-    opt.textContent = b;
-    branchSelect.appendChild(opt);
-  });
-  
-  // Populate Years
-  yearSelect.innerHTML = '';
-  programData.years.forEach(y => {
-    const opt = document.createElement('option');
-    opt.value = y;
-    opt.textContent = `${y}${y === 1 ? 'st' : y === 2 ? 'nd' : y === 3 ? 'rd' : 'th'} Year`;
-    yearSelect.appendChild(opt);
-  });
-}
-
-// Faculty / HOD Cascade logic
 function onFacLevelChange() {
   const level = document.getElementById('facLevelSelect').value;
   const programSelect = document.getElementById('facProgramSelect');
@@ -370,63 +288,87 @@ function onFacProgramChange() {
   });
 }
 
-function handleRoleChange(role) {
-  const studentAcademicFields = document.getElementById('studentAcademicFields');
-  const facultySpecificFields = document.getElementById('facultySpecificFields');
-  const regdIdGroup = document.getElementById('regdIdGroup');
-  const nameOptionalBadge = document.getElementById('nameOptionalBadge');
-  const roleStudentCard = document.getElementById('roleStudentCard');
-  const roleFacultyCard = document.getElementById('roleFacultyCard');
+function setAdminSubRole(subRole) {
+  const aoCard = document.getElementById('subOptionAoCard');
+  const staffCard = document.getElementById('subOptionStaffCard');
+  const aoRadio = document.querySelector('input[name="faculty_role_type"][value="ao"]');
   
-  if (role === 'student') {
-    studentAcademicFields.style.display = 'block';
-    facultySpecificFields.style.display = 'none';
-    regdIdGroup.style.display = 'block';
-    nameOptionalBadge.textContent = '(Optional for Students)';
-    roleStudentCard.style.borderColor = 'var(--primary)';
-    roleStudentCard.style.background = '#eef2ff';
-    roleFacultyCard.style.borderColor = 'var(--border-color)';
-    roleFacultyCard.style.background = '#f8fafc';
+  if (subRole === 'ao') {
+    if (aoCard) {
+      aoCard.style.borderColor = '#0284c7';
+      aoCard.style.borderWidth = '2px';
+    }
+    if (staffCard) {
+      staffCard.style.borderColor = '#cbd5e1';
+      staffCard.style.borderWidth = '1.5px';
+    }
+    if (aoRadio) aoRadio.value = 'ao';
+    document.getElementById('email').placeholder = 'ao@college.com';
   } else {
-    studentAcademicFields.style.display = 'none';
-    facultySpecificFields.style.display = 'block';
-    regdIdGroup.style.display = 'none';
-    nameOptionalBadge.textContent = '(Required)';
-    roleFacultyCard.style.borderColor = '#7c3aed';
-    roleFacultyCard.style.background = '#f5f3ff';
-    roleStudentCard.style.borderColor = 'var(--border-color)';
-    roleStudentCard.style.background = '#f8fafc';
-    onFacLevelChange();
+    if (staffCard) {
+      staffCard.style.borderColor = '#0284c7';
+      staffCard.style.borderWidth = '2px';
+    }
+    if (aoCard) {
+      aoCard.style.borderColor = '#cbd5e1';
+      aoCard.style.borderWidth = '1.5px';
+    }
+    if (aoRadio) aoRadio.value = 'office_staff';
+    document.getElementById('email').placeholder = 'office-staff@college.com';
   }
 }
 
-function onFacultyRoleTypeChange(roleType) {
-  const facultyCategoryGroup = document.getElementById('facultyCategoryGroup');
-  const facultyAcademicCascadeGroup = document.getElementById('facultyAcademicCascadeGroup');
-  
-  if (roleType === 'admin') {
-    facultyCategoryGroup.style.display = 'none';
-    facultyAcademicCascadeGroup.style.display = 'none';
-  } else if (roleType === 'hod') {
-    facultyCategoryGroup.style.display = 'none';
-    facultyAcademicCascadeGroup.style.display = 'block';
-    onFacLevelChange();
-  } else {
-    facultyCategoryGroup.style.display = 'block';
-    facultyAcademicCascadeGroup.style.display = 'block';
-    onFacLevelChange();
-  }
-}
+function onRoleSelect(role) {
+  const cards = {
+    'staff': document.getElementById('roleCardStaff'),
+    'hod': document.getElementById('roleCardHod'),
+    'ao': document.getElementById('roleCardAo'),
+    'principal': document.getElementById('roleCardPrincipal')
+  };
 
-function onFacultyCategoryChange() {
-  const cascadeGroup = document.getElementById('facultyAcademicCascadeGroup');
-  cascadeGroup.style.display = 'block';
-  onFacLevelChange();
+  const academicFields = document.getElementById('academicDepartmentFields');
+  const aoSubSection = document.getElementById('aoSubOptionSection');
+
+  // Reset all cards
+  Object.keys(cards).forEach(k => {
+    if (cards[k]) {
+      cards[k].style.borderColor = 'var(--border-color)';
+      cards[k].style.background = '#f8fafc';
+      const titleSpan = cards[k].querySelector('span:nth-child(3)');
+      if (titleSpan) titleSpan.style.color = '#0f172a';
+    }
+  });
+
+  // Activate selected card
+  if (cards[role]) {
+    cards[role].style.borderColor = 'var(--primary)';
+    cards[role].style.background = '#eef2ff';
+    const titleSpan = cards[role].querySelector('span:nth-child(3)');
+    if (titleSpan) titleSpan.style.color = '#1e1b4b';
+    const input = cards[role].querySelector('input');
+    if (input) input.checked = true;
+  }
+
+  // Toggle sections
+  if (role === 'staff' || role === 'hod') {
+    academicFields.style.display = 'block';
+    if (aoSubSection) aoSubSection.style.display = 'none';
+    document.getElementById('email').placeholder = role === 'hod' ? 'hod@college.com' : 'staff@college.com';
+  } else if (role === 'ao') {
+    academicFields.style.display = 'none';
+    if (aoSubSection) aoSubSection.style.display = 'block';
+    const subVal = document.querySelector('input[name="ao_sub_type"]:checked')?.value || 'ao';
+    setAdminSubRole(subVal);
+  } else {
+    academicFields.style.display = 'none';
+    if (aoSubSection) aoSubSection.style.display = 'none';
+    document.getElementById('email').placeholder = 'principal@college.com';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  onLevelChange();
-  handleRoleChange('student');
+  onFacLevelChange();
+  onRoleSelect('staff');
 });
 </script>
 {% endblock %}

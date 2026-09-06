@@ -38,7 +38,10 @@ CREATE TABLE IF NOT EXISTS queries (
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'Academics',
+    level TEXT,
+    course TEXT,
     department TEXT NOT NULL,
+    year INTEGER,
     priority TEXT NOT NULL DEFAULT 'Medium',
     status TEXT NOT NULL DEFAULT 'New',
     assigned_staff_id INTEGER,
@@ -157,6 +160,15 @@ def check_and_migrate_db(db_conn):
         if 'last_active_at' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
             
+        cursor.execute("PRAGMA table_info(queries)")
+        q_cols = [row[1] for row in cursor.fetchall()]
+        if 'level' not in q_cols:
+            cursor.execute("ALTER TABLE queries ADD COLUMN level TEXT")
+        if 'course' not in q_cols:
+            cursor.execute("ALTER TABLE queries ADD COLUMN course TEXT")
+        if 'year' not in q_cols:
+            cursor.execute("ALTER TABLE queries ADD COLUMN year INTEGER")
+
         cursor.execute("PRAGMA table_info(admin_hod_messages)")
         msg_cols = [row[1] for row in cursor.fetchall()]
         if 'is_read' not in msg_cols:

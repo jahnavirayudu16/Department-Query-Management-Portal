@@ -192,12 +192,16 @@
     <!-- RIGHT COLUMN: Actions & Query Information -->
     <div style="display: flex; flex-direction: column; gap: 1.25rem;">
 
-      <!-- HOD & CENTRAL ADMIN CONTROLS: Staff Assignment, Priority, Re-route -->
-      {% if current_user.role in ['admin', 'hod'] %}
+      <!-- HOD, AO, PRINCIPAL & CENTRAL ADMIN CONTROLS: Staff Assignment, Priority, Re-route -->
+      {% if current_user.role in ['admin', 'hod', 'ao', 'principal'] %}
       <div class="card" style="border-top: 4px solid var(--primary); background: #ffffff;">
         <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 1rem; color: #1e1b4b; display: flex; align-items: center; gap: 0.4rem;">
           {% if current_user.role == 'hod' %}
             🎓 {{ current_user.department or 'Department' }} HOD Assignment Desk
+          {% elif current_user.role == 'ao' %}
+            🏢 AO Office Staff Assignment Desk
+          {% elif current_user.role == 'principal' %}
+            🏛️ Principal Staff Assignment Desk
           {% else %}
             ⚡ Central Admin Assignment Desk
           {% endif %}
@@ -207,12 +211,18 @@
         <form method="POST" action="{{ url_for('reassign_query', query_id=query.id) }}">
           
           <div class="form-group">
-            <label class="form-label" style="font-weight: 700;">Assign Department Staff *</label>
-            <select name="assigned_staff_id" class="form-control" style="font-size: 0.85rem;">
-              <option value="">-- Select Staff to Assign --</option>
+            <label class="form-label" style="font-weight: 700;">
+              {% if current_user.role == 'ao' %}
+                Assign Office Staff *
+              {% else %}
+                Assign Department Staff *
+              {% endif %}
+            </label>
+            <select name="assigned_staff_id" class="form-control" style="font-size: 0.85rem;" required>
+              <option value="">-- {% if current_user.role == 'ao' %}Select Office Staff to Assign{% else %}Select Staff to Assign{% endif %} --</option>
               {% for s in dept_staff %}
               <option value="{{ s.id }}" {% if query.assigned_staff_id == s.id %}selected{% endif %}>
-                👤 {{ s.name }} ({{ s.designation or s.department or 'Staff' }})
+                👤 {{ s.name }} ({% if s.role == 'office_staff' %}Office Staff{% else %}{{ s.designation or s.department or 'Staff' }}{% endif %})
               </option>
               {% endfor %}
             </select>
@@ -221,7 +231,7 @@
           <div class="form-group">
             <label class="form-label" style="font-weight: 700;">Priority Level</label>
             <select name="priority" class="form-control" style="font-size: 0.85rem;">
-              <option value="Urgent" {% if query.priority == 'Urgent' %}selected{% endif %}>Urgent Priority</option>
+              <option value="Critical" {% if query.priority == 'Critical' or query.priority == 'Urgent' %}selected{% endif %}>🚨 Critical Priority</option>
               <option value="High" {% if query.priority == 'High' %}selected{% endif %}>High Priority</option>
               <option value="Medium" {% if query.priority == 'Medium' %}selected{% endif %}>Medium Priority</option>
               <option value="Low" {% if query.priority == 'Low' %}selected{% endif %}>Low Priority</option>
@@ -240,7 +250,7 @@
           {% endif %}
 
           <button type="submit" class="btn btn-primary btn-sm" style="width: 100%; font-weight: 700; padding: 0.6rem;">
-            💾 Confirm Staff Assignment
+            💾 {% if current_user.role == 'ao' %}Confirm Office Staff Assignment{% else %}Confirm Staff Assignment{% endif %}
           </button>
         </form>
       </div>

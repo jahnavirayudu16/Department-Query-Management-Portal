@@ -1,7 +1,7 @@
 import sqlite3
 from flask import g, current_app
 from config import Config
-from models import check_and_migrate_db
+from models import check_and_migrate_db, init_db
 
 def get_db():
     """Opens a new database connection if there is none yet for the current application context."""
@@ -12,7 +12,7 @@ def get_db():
         )
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
-        #check_and_migrate_db(g.db)
+        init_db(g.db)
     return g.db
 
 def get_standalone_db():

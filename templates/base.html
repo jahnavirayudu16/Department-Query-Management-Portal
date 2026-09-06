@@ -42,9 +42,36 @@
       </div>
 
       <nav class="sidebar-nav">
+        {% if current_user.role == 'principal' %}
+        <!-- Principal Focused Navigation -->
+        <div class="nav-section-title">Principal Navigation</div>
         <a href="{{ url_for('index') }}" class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">
           <span class="icon">🏠</span> Portal Home
         </a>
+        <a href="{{ url_for('department_dashboard', dept='Others') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
+          <span class="icon">📥</span> Received Queries
+        </a>
+        <a href="{{ url_for('track_query') }}" class="nav-item {% if request.endpoint == 'track_query' %}active{% endif %}">
+          <span class="icon">🔍</span> Track Status
+        </a>
+        <a href="{{ url_for('admin_analytics') }}" class="nav-item {% if request.endpoint in ['admin_analytics', 'hod_analytics'] %}active{% endif %}">
+          <span class="icon">📊</span> Analysis
+        </a>
+        <a href="{{ url_for('admin_users') }}" class="nav-item {% if request.endpoint == 'admin_users' %}active{% endif %}">
+          <span class="icon">👥</span> Users
+        </a>
+        <a href="{{ url_for('admin_communicate_hod') }}" class="nav-item {% if request.endpoint == 'admin_communicate_hod' %}active{% endif %}">
+          <span class="icon">💬</span> Communicate with HOD
+        </a>
+        {% else %}
+        <!-- Standard Top Navigation -->
+        <a href="{{ url_for('index') }}" class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">
+          <span class="icon">🏠</span> Portal Home
+        </a>
+        <a href="{{ url_for('track_query') }}" class="nav-item {% if request.endpoint == 'track_query' %}active{% endif %}">
+          <span class="icon">🔍</span> Track Query Status
+        </a>
+
         {% if current_user.role in ['student', 'faculty'] %}
         <div class="nav-section-title">My Workspace (Personal)</div>
         <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
@@ -65,16 +92,23 @@
         </a>
         {% endif %}
 
-        {% if current_user.role in ['staff', 'admin', 'faculty'] %}
-        <div class="nav-section-title">Department Desk (Resolver)</div>
+        {% if current_user.role in ['staff', 'office_staff', 'faculty'] %}
+        <div class="nav-section-title">{% if current_user.role == 'office_staff' %}Office Staff Desk{% else %}Department Desk (Resolver){% endif %}</div>
         <a href="{{ url_for('department_dashboard') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
-          <span class="icon">📥</span> Solve Queries
+          <span class="icon">📥</span> My Assigned Queries
+        </a>
+        <a href="{{ url_for('submit_query') }}" class="nav-item {% if request.endpoint == 'submit_query' %}active{% endif %}">
+          <span class="icon">✍️</span> Post Query
         </a>
         {% endif %}
 
-        {% if current_user.role == 'faculty' %}
-        <a href="{{ url_for('faculty_choice') }}" class="nav-item {% if request.endpoint == 'faculty_choice' %}active{% endif %}" style="color: #7c3aed; font-weight: 700;">
-          <span class="icon">🔄</span> Switch Mode
+        {% if current_user.role == 'ao' %}
+        <div class="nav-section-title">Administrative Desk (AO)</div>
+        <a href="{{ url_for('department_dashboard', dept='Administrative') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
+          <span class="icon">🏢</span> Administrative Queue
+        </a>
+        <a href="{{ url_for('admin_analytics') }}" class="nav-item {% if request.endpoint in ['admin_analytics', 'hod_analytics'] %}active{% endif %}">
+          <span class="icon">📈</span> AO & HOD Status Analytics
         </a>
         {% endif %}
 
@@ -84,7 +118,7 @@
           <span class="icon">⚡</span> Admin Cockpit
         </a>
         <a href="{{ url_for('admin_analytics') }}" class="nav-item {% if request.endpoint == 'admin_analytics' %}active{% endif %}">
-          <span class="icon">📈</span> Analytics & Pie Charts
+          <span class="icon">📈</span> Total Campus Analytics
         </a>
         <a href="{{ url_for('admin_users') }}" class="nav-item {% if request.endpoint == 'admin_users' %}active{% endif %}">
           <span class="icon">👥</span> Users Directory
@@ -95,6 +129,7 @@
         <a href="{{ url_for('admin_communicate_hod') }}" class="nav-item {% if request.endpoint == 'admin_communicate_hod' %}active{% endif %}">
           <span class="icon">💬</span> Communicate with HOD
         </a>
+        {% endif %}
         {% endif %}
 
         <div class="nav-section-title">Account</div>
@@ -116,19 +151,25 @@
 
       <div class="sidebar-footer">
         <div class="user-avatar-circle">
-          {% if current_user.role == 'student' %}👨‍🎓{% elif current_user.role == 'faculty' %}👩‍🏫{% elif current_user.role == 'hod' %}🎓{% elif current_user.role == 'staff' %}🏢{% else %}⚡{% endif %}
+          {% if current_user.role == 'student' %}👨‍🎓{% elif current_user.role == 'hod' %}🎓{% elif current_user.role == 'ao' %}🏢{% elif current_user.role == 'office_staff' %}💼{% elif current_user.role == 'principal' %}🏛️{% elif current_user.role in ['staff', 'faculty'] %}👩‍🏫{% else %}⚡{% endif %}
         </div>
         <div style="flex-grow: 1; overflow: hidden;">
           <div style="font-size: 0.88rem; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             {% if current_user.role == 'student' %}Student
-            {% elif current_user.role == 'faculty' %}Faculty Member
+            {% elif current_user.role == 'office_staff' %}Office Staff
+            {% elif current_user.role in ['staff', 'faculty'] %}Department Staff
             {% elif current_user.role == 'hod' %}Head of Dept (HOD)
-            {% elif current_user.role == 'staff' %}Department Staff
+            {% elif current_user.role == 'ao' %}Administrative Officer (AO)
+            {% elif current_user.role == 'principal' %}Principal
             {% else %}Central Administrator{% endif %}
           </div>
           <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">
             {% if current_user.role == 'student' %}
               {{ current_user.course or 'Campus' }}{% if current_user.year %} (Yr {{ current_user.year }}){% endif %}
+            {% elif current_user.role in ['ao', 'principal', 'admin'] %}
+              {{ current_user.designation or 'Campus Administration' }}
+            {% elif current_user.role == 'office_staff' %}
+              Administrative Department
             {% else %}
               {{ current_user.department or 'Campus Support' }}
             {% endif %}

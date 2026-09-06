@@ -45,30 +45,42 @@ def seed_database(force_reset=True):
     if cursor.fetchone()[0] == 0:
         now = datetime.now()
         now_str = now.strftime('%Y-%m-%d %H:%M:%S')
-        print("Seeding pristine demo users and HOD strictly for 1 primary department (CSE)...")
+        print("Seeding pristine demo users and degree-specific HODs...")
         users_data = [
-            # 1. Main Demo Student (CSE - 3rd Year)
-            ('Student (CSE 3rd Yr)', 'student@college.com', generate_password_hash('student123'), 'student', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', 3, '', '23B91A0501', 'Student', 1, now_str),
+            # 1. B.Tech Demo Student (CSE - 3rd Year)
+            ('Student (B.Tech CSE 3rd Yr)', 'student@college.com', generate_password_hash('student123'), 'student', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', 3, '', '23B91A0501', 'Student (B.Tech CSE)', 1, now_str),
             
-            # 2. Main Demo Faculty (CSE)
-            ('Faculty Member (CSE)', 'faculty@college.com', generate_password_hash('faculty123'), 'faculty', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'Assistant Professor', 1, now_str),
-            
-            # 3. Main Demo HOD (CSE HOD Only)
-            ('Dr. Grace Hopper (CSE HOD)', 'cse-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'Head of Department (CSE)', 1, now_str),
-            
-            # 4. CSE Department Staff
-            ('Prof. Linus Torvalds', 'cse-staff@college.com', generate_password_hash('staff123'), 'staff', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'CSE Department Coordinator', 1, now_str),
+            # 2. M.Tech Demo Student (CSE - 1st Year)
+            ('Student (M.Tech CSE 1st Yr)', 'mtech-student@college.com', generate_password_hash('student123'), 'student', 'PG', 'Computer Science & Engineering (CSE)', 'M.Tech', 1, '', '25B91D5801', 'Student (M.Tech CSE)', 1, now_str),
 
-            # 5. Academics Wing Resolver Staff
-            ('Dr. Alan Turing', 'academics-staff@college.com', generate_password_hash('staff123'), 'staff', None, 'Academics', None, None, '', '', 'Academics Coordinator', 1, now_str),
+            # 3. B.Tech CSE HOD (UG)
+            ('Dr. Grace Hopper (B.Tech CSE HOD)', 'cse-hod@college.com', generate_password_hash('hod123'), 'hod', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'Head of Department (B.Tech CSE)', 1, now_str),
             
-            # 6. Administrative Wing Resolver Staff
-            ('Mrs. Eleanor Wright', 'admin-staff@college.com', generate_password_hash('staff123'), 'staff', None, 'Administrative', None, None, '', '', 'Administrative Officer', 1, now_str),
+            # 4. B.Tech CSE Staff
+            ('Prof. Linus Torvalds', 'cse-staff@college.com', generate_password_hash('staff123'), 'staff', 'UG', 'Computer Science & Engineering (CSE)', 'B.Tech', None, '', '', 'B.Tech CSE Assistant Professor / Staff', 1, now_str),
+
+            # 5. M.Tech CSE HOD (PG)
+            ('Dr. Barbara Liskov (M.Tech CSE HOD)', 'mtech-cse-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'Computer Science & Engineering (CSE)', 'M.Tech', None, '', '', 'Head of Department (M.Tech CSE)', 1, now_str),
             
-            # 7. Others Wing Resolver Staff
-            ('David Kumar', 'staff@college.com', generate_password_hash('staff123'), 'staff', None, 'Others', None, None, '', '', 'Campus Support Lead', 1, now_str),
+            # 6. M.Tech CSE Staff
+            ('Prof. Donald Knuth', 'mtech-cse-staff@college.com', generate_password_hash('staff123'), 'staff', 'PG', 'Computer Science & Engineering (CSE)', 'M.Tech', None, '', '', 'M.Tech CSE Assistant Professor / Staff', 1, now_str),
+
+            # 7. MCA HOD
+            ('Dr. Tim Berners-Lee (MCA HOD)', 'mca-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'Master of Computer Applications (MCA)', 'MCA', None, '', '', 'Head of Department (MCA)', 1, now_str),
+
+            # 8. MBA HOD
+            ('Dr. Peter Drucker (MBA HOD)', 'mba-hod@college.com', generate_password_hash('hod123'), 'hod', 'PG', 'Master of Business Administration (MBA)', 'MBA', None, '', '', 'Head of Department (MBA)', 1, now_str),
+
+            # 9. Administrative Officer (AO)
+            ('Mrs. Eleanor Wright (AO)', 'ao@college.com', generate_password_hash('ao123'), 'ao', None, 'Administrative', None, None, '', '', 'Administrative Officer (AO)', 1, now_str),
             
-            # 8. Central Admin
+            # 10. Office Staff (Administrative)
+            ('Mr. Ramesh Kumar (Office Staff)', 'office-staff@college.com', generate_password_hash('staff123'), 'office_staff', None, 'Administrative', None, None, '', '', 'Office Staff / Admin Assistant', 1, now_str),
+
+            # 11. Principal
+            ('Dr. Alan Turing (Principal)', 'principal@college.com', generate_password_hash('principal123'), 'principal', None, 'College Administration', None, None, '', '', 'Principal', 1, now_str),
+            
+            # 12. Central Administrator
             ('Central Administrator', 'admin@college.com', generate_password_hash('admin123'), 'admin', None, None, None, None, '', '', 'Central Administrator', 1, now_str)
         ]
         
@@ -82,22 +94,26 @@ def seed_database(force_reset=True):
         cursor.execute("SELECT id, email FROM users")
         user_id_map = {row[1]: row[0] for row in cursor.fetchall()}
         
-        s_cse3 = user_id_map.get('student@college.com')
-        fac_uid = user_id_map.get('faculty@college.com')
+        s_btech = user_id_map.get('student@college.com')
+        s_mtech = user_id_map.get('mtech-student@college.com')
         cse_staff_uid = user_id_map.get('cse-staff@college.com')
-        acad_staff_uid = user_id_map.get('academics-staff@college.com')
-        admin_staff_uid = user_id_map.get('admin-staff@college.com')
-        others_staff_uid = user_id_map.get('staff@college.com')
+        mtech_staff_uid = user_id_map.get('mtech-cse-staff@college.com')
+        ao_uid = user_id_map.get('ao@college.com')
+        office_staff_uid = user_id_map.get('office-staff@college.com')
+        principal_uid = user_id_map.get('principal@college.com')
         
-        print("Seeding demo queries strictly for CSE and primary service wings...")
+        print("Seeding demo queries with distinct B.Tech vs M.Tech degree routing and AO Office Staff assignment...")
         sample_queries = [
-            # CSE Queries
+            # 1. B.Tech CSE Query - In Progress (Assigned to B.Tech CSE Staff)
             {
-                'user_id': s_cse3,
+                'user_id': s_btech,
                 'title': 'Operating Systems Lab System 14 Crash during practical',
                 'description': 'System 14 in CSE Lab 2 has an OS kernel panic during Linux threading experiments. Need replacement.',
                 'category': 'Academics',
+                'level': 'UG',
+                'course': 'B.Tech',
                 'department': 'Computer Science & Engineering (CSE)',
+                'year': 3,
                 'priority': 'High',
                 'status': 'In Progress',
                 'assigned_staff_id': cse_staff_uid,
@@ -105,57 +121,87 @@ def seed_database(force_reset=True):
                 'first_response_at': now - timedelta(hours=4, minutes=45),
                 'updated_at': now - timedelta(hours=2)
             },
+            # 2. B.Tech CSE Query - New / Unassigned (For B.Tech CSE HOD to assign)
             {
-                'user_id': s_cse3,
+                'user_id': s_btech,
                 'title': 'Data Structures Internal Marks Discrepancy',
                 'description': 'Midterm 2 marks for DSA are uploaded as 14/30 instead of 28/30. Answer script verified with lecturer.',
                 'category': 'Academics',
+                'level': 'UG',
+                'course': 'B.Tech',
                 'department': 'Computer Science & Engineering (CSE)',
+                'year': 3,
                 'priority': 'High',
                 'status': 'New',
-                'assigned_staff_id': None, # Unassigned for CSE HOD to assign!
+                'assigned_staff_id': None, # Unassigned for B.Tech CSE HOD to assign!
                 'created_at': now - timedelta(hours=3),
                 'first_response_at': None,
                 'updated_at': now - timedelta(hours=3)
             },
-            # Faculty Academic Query
+            # 3. M.Tech CSE Query - New / Unassigned (Strictly for M.Tech CSE HOD to assign!)
             {
-                'user_id': fac_uid,
-                'title': 'Smart Board projector HDMI input not responding in CSE Seminar Hall 1',
-                'description': 'Digital interactive podium display is showing No Signal. Faculty guest lecture at 3 PM today.',
+                'user_id': s_mtech,
+                'title': 'Advanced Algorithms Research Paper IEEE Journal Access',
+                'description': 'IEEE Xplore repository digital library credentials are not activating for M.Tech CSE 1st Year research dissertation batch.',
                 'category': 'Academics',
+                'level': 'PG',
+                'course': 'M.Tech',
                 'department': 'Computer Science & Engineering (CSE)',
+                'year': 1,
                 'priority': 'High',
-                'status': 'In Progress',
-                'assigned_staff_id': cse_staff_uid,
-                'created_at': now - timedelta(hours=1, minutes=30),
-                'first_response_at': now - timedelta(minutes=45),
-                'updated_at': now - timedelta(minutes=45)
+                'status': 'New',
+                'assigned_staff_id': None, # Unassigned for M.Tech CSE HOD to assign!
+                'created_at': now - timedelta(hours=2),
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=2)
             },
-            # Administrative Wing Query
+            # 4. Administrative Wing Query - New / Unassigned (For AO to assign to Office Staff!)
             {
-                'user_id': s_cse3,
+                'user_id': s_btech,
                 'title': 'Semester tuition fee payment of 45,000 not updated in receipts',
                 'description': 'Completed fee payment via NetBanking with Ref #TXN983241, but account still shows dues.',
                 'category': 'Administrative',
+                'level': 'UG',
+                'course': 'B.Tech',
                 'department': 'Administrative',
+                'year': 3,
                 'priority': 'Medium',
-                'status': 'In Progress',
-                'assigned_staff_id': admin_staff_uid,
+                'status': 'New',
+                'assigned_staff_id': None, # Unassigned for AO to assign to Office Staff!
                 'created_at': now - timedelta(hours=6),
-                'first_response_at': now - timedelta(hours=5),
-                'updated_at': now - timedelta(hours=2)
+                'first_response_at': None,
+                'updated_at': now - timedelta(hours=6)
             },
-            # Others Desk Query (Hostel / Wi-Fi)
+            # 5. Administrative Wing Query - In Progress (Assigned to Office Staff)
             {
-                'user_id': s_cse3,
+                'user_id': s_btech,
+                'title': 'Urgent Bonafide Certificate required for Passport Verification',
+                'description': 'Applied for Bonafide certificate online 3 days ago. Need physical seal and signature from administrative office.',
+                'category': 'Administrative',
+                'level': 'UG',
+                'course': 'B.Tech',
+                'department': 'Administrative',
+                'year': 3,
+                'priority': 'High',
+                'status': 'In Progress',
+                'assigned_staff_id': office_staff_uid,
+                'created_at': now - timedelta(hours=4),
+                'first_response_at': now - timedelta(hours=3, minutes=30),
+                'updated_at': now - timedelta(hours=1)
+            },
+            # 6. Others Desk Query (Assigned to Principal / Facilities Lead)
+            {
+                'user_id': s_btech,
                 'title': 'Campus Wi-Fi connectivity dropped in South Block Hostel',
                 'description': 'Wi-Fi router on 2nd floor South Block has no internet gateway since yesterday evening.',
                 'category': 'Others',
+                'level': 'UG',
+                'course': 'B.Tech',
                 'department': 'Others',
+                'year': 3,
                 'priority': 'High',
                 'status': 'In Progress',
-                'assigned_staff_id': others_staff_uid,
+                'assigned_staff_id': principal_uid,
                 'created_at': now - timedelta(hours=2),
                 'first_response_at': now - timedelta(hours=1, minutes=40),
                 'updated_at': now - timedelta(minutes=40)
@@ -164,10 +210,10 @@ def seed_database(force_reset=True):
         
         for q in sample_queries:
             cursor.execute("""
-                INSERT INTO queries (user_id, title, description, category, department, priority, status, assigned_staff_id, created_at, first_response_at, resolved_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO queries (user_id, title, description, category, level, course, department, year, priority, status, assigned_staff_id, created_at, first_response_at, resolved_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                q['user_id'], q['title'], q['description'], q['category'], q['department'],
+                q['user_id'], q['title'], q['description'], q['category'], q['level'], q['course'], q['department'], q['year'],
                 q['priority'], q['status'], q['assigned_staff_id'],
                 q['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
                 q['first_response_at'].strftime('%Y-%m-%d %H:%M:%S') if q['first_response_at'] else None,

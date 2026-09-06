@@ -192,21 +192,81 @@ class TestDQMSystem(unittest.TestCase):
         messages = res2.get_json()['messages']
         self.assertTrue(any('Please review pending lab query' in m['message'] for m in messages))
 
-    def test_end_to_end_cse_student_to_hod_to_staff_flow(self):
-        """Verify that when a CSE student raises a query, it routes to CSE HOD, HOD assigns CSE staff, and staff updates status."""
-        # 1. CSE Student logs in and files a query
-        self.client.post('/login', data={'email': 'student@college.com', 'password': 'student123'})
-        res = self.client.post('/submit-query', data={
-            'title': 'Compiler Design Lab Syntax Error',
-            'description': 'Lex and Yacc flex compiler parsing error in CSE Lab 3.'
+    def test_degree_specific_routing_btech_vs_mtech(self):
+        """Verify that B.Tech queries ONLY appear in B.Tech HOD queue, and M.Tech queries ONLY appear in M.Tech HOD queue."""
+        # 1. Submit B.Tech CSE Query
+        res1 = self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'level': 'UG',
+            'course': 'B.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '3',
+            'title': 'B.Tech DBMS Lab MySQL Connection Issue',
+            'description': 'Students cannot connect to MySQL server on CSE Lab 4 during practical session.'
         }, follow_redirects=True)
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res1.status_code, 200)
 
-        # 2. Verify query is in CSE HOD's queue
+        # 2. Submit M.Tech CSE Query
+        res2 = self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'level': 'PG',
+            'course': 'M.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '1',
+            'title': 'M.Tech Deep Learning GPU Cluster Allocation',
+            'description': 'NVIDIA A100 GPU cluster access keys required for M.Tech dissertation batch.'
+        }, follow_redirects=True)
+        self.assertEqual(res2.status_code, 200)
+
+        # 3. Check B.Tech CSE HOD Dashboard -> Must see B.Tech query, MUST NOT see M.Tech query
         self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
-        res_hod = self.client.get('/department-dashboard')
-        self.assertEqual(res_hod.status_code, 200)
-        self.assertIn(b'Compiler Design Lab Syntax Error', res_hod.data)
+        res_btech_hod = self.client.get('/department-dashboard')
+        self.assertEqual(res_btech_hod.status_code, 200)
+        self.assertIn(b'B.Tech DBMS Lab MySQL Connection Issue', res_btech_hod.data)
+        self.assertNotIn(b'M.Tech Deep Learning GPU Cluster Allocation', res_btech_hod.data)
+
+        # 4. Check M.Tech CSE HOD Dashboard -> Must see M.Tech query, MUST NOT see B.Tech query
+        self.client.post('/login', data={'email': 'mtech-cse-hod@college.com', 'password': 'hod123'})
+        res_mtech_hod = self.client.get('/department-dashboard')
+        self.assertEqual(res_mtech_hod.status_code, 200)
+        self.assertIn(b'M.Tech Deep Learning GPU Cluster Allocation', res_mtech_hod.data)
+        self.assertNotIn(b'B.Tech DBMS Lab MySQL Connection Issue', res_mtech_hod.data)
+
+    def test_administrative_and_principal_routing(self):
+        """Verify that Administrative queries route to AO and Others queries route to Principal."""
+        # Administrative query
+        self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'level': 'UG',
+            'course': 'B.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '3',
+            'title': 'Fee Receipt Verification Delay',
+            'description': 'Tuition fee payment challan submitted 5 days ago but receipt is still pending.'
+        }, follow_redirects=True)
+
+        # AO logs in
+        self.client.post('/login', data={'email': 'ao@college.com', 'password': 'ao123'})
+        res_ao = self.client.get('/department-dashboard?dept=Administrative')
+        self.assertEqual(res_ao.status_code, 200)
+        self.assertIn(b'Fee Receipt Verification Delay', res_ao.data)
+
+        # Others query
+        self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'level': 'UG',
+            'course': 'B.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '3',
+            'title': 'Hostel Cleanliness Issue',
+            'description': 'Hostel water cooler and corridor cleaning requested.'
+        }, follow_redirects=True)
+
+        # Principal logs in
+        self.client.post('/login', data={'email': 'principal@college.com', 'password': 'principal123'})
+        res_prin = self.client.get('/department-dashboard?dept=Others')
+        self.assertEqual(res_prin.status_code, 200)
+        self.assertIn(b'Hostel Cleanliness Issue', res_prin.data)
 
 if __name__ == '__main__':
     unittest.main()

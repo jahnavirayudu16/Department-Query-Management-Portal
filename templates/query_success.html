@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}Query Submitted Successfully | Query #{{ query.id }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 680px; margin: 2rem auto;">
+
+  <div class="card" style="padding: 2.5rem 2rem; background: #ffffff; border: 1px solid var(--border-color); box-shadow: var(--shadow-lg); text-align: center;">
+    
+    <!-- Success Icon Animation -->
+    <div style="width: 72px; height: 72px; border-radius: 50%; background: #dcfce7; color: #16a34a; font-size: 2.5rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 3px solid #86efac; box-shadow: 0 4px 6px -1px rgba(22, 163, 74, 0.2);">
+      ✓
+    </div>
+
+    <span class="badge badge-status-new" style="font-size: 0.85rem; padding: 6px 14px; margin-bottom: 0.75rem;">
+      🎉 Query Submitted Successfully
+    </span>
+
+    <h1 style="font-size: 1.8rem; font-weight: 800; color: #0f172a; margin: 0.25rem 0 0.5rem;">
+      Your Query is Logged!
+    </h1>
+    <p style="font-size: 0.92rem; color: #475569; margin: 0 auto 1.5rem; max-width: 520px; line-height: 1.5;">
+      Please save your unique <strong>Query ID</strong> below. You can use this ID anytime on the home page to track resolution progress and chat with the assigned resolver without a password.
+    </p>
+
+    <!-- Prominent Unique Query ID Card with 1-Click Copy -->
+    <div style="background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%); border: 2px dashed #6366f1; border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 2rem;">
+      <div style="font-size: 0.78rem; font-weight: 800; text-transform: uppercase; color: #4338ca; margin-bottom: 0.35rem;">
+        Your Unique Query Tracking ID:
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
+        <div id="queryIdDisplay" style="font-size: 2.2rem; font-weight: 800; color: #1e1b4b; letter-spacing: 1px; font-family: monospace;">
+          #{{ query.id }}
+        </div>
+        <button type="button" onclick="copyQueryId('{{ query.id }}')" id="copyBtn" class="btn btn-secondary btn-sm" style="font-weight: 700; background: #ffffff; border: 1.5px solid #cbd5e1; padding: 0.45rem 0.85rem;">
+          📋 Copy ID
+        </button>
+      </div>
+      <div id="copyAlert" style="font-size: 0.78rem; color: #16a34a; font-weight: 700; margin-top: 0.35rem; display: none;">
+        ✓ Query ID copied to clipboard!
+      </div>
+    </div>
+
+    <!-- Routed Information Strip -->
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 1.25rem; text-align: left; margin-bottom: 2rem;">
+      <div style="font-size: 0.78rem; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.35rem;">
+        📋 Query Routing Summary
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.88rem; margin-bottom: 0.75rem;">
+        <div>
+          <span style="color: #64748b; display: block; font-size: 0.75rem;">Category Pillar:</span>
+          <strong>
+            {% if query.category == 'Academics' %}📚 Academics
+            {% elif query.category == 'Administrative' %}🏢 Administrative
+            {% else %}🔧 Campus Support (Others){% endif %}
+          </strong>
+        </div>
+        <div>
+          <span style="color: #64748b; display: block; font-size: 0.75rem;">Priority Level:</span>
+          <span class="badge badge-{{ query.priority.lower() }}">{{ query.priority }}</span>
+        </div>
+      </div>
+
+      <div style="font-size: 0.88rem;">
+        <span style="color: #64748b; display: block; font-size: 0.75rem;">Routed Authority:</span>
+        <strong style="color: #4f46e5;">
+          {% if query.category == 'Academics' %}
+            🎓 {{ query.department }} Head of Department (HOD)
+          {% elif query.category == 'Administrative' %}
+            🏢 Administrative Officer (AO)
+          {% else %}
+            🏛️ Principal Desk
+          {% endif %}
+        </strong>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <a href="{{ url_for('track_query', query_id=query.id) }}" class="btn btn-primary btn-lg" style="font-weight: 800; padding: 0.85rem; font-size: 1.05rem; box-shadow: var(--shadow-md);">
+        🔍 Track Query Status & Live Chat →
+      </a>
+      
+      <div style="display: flex; gap: 0.75rem; justify-content: center; margin-top: 0.5rem;">
+        <a href="{{ url_for('submit_query') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
+          ✍️ Post Another Query
+        </a>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
+          🏠 Back to Home
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+function copyQueryId(qid) {
+  navigator.clipboard.writeText(qid).then(() => {
+    const alertEl = document.getElementById('copyAlert');
+    const copyBtn = document.getElementById('copyBtn');
+    if (alertEl) alertEl.style.display = 'block';
+    if (copyBtn) copyBtn.textContent = '✓ Copied!';
+    setTimeout(() => {
+      if (alertEl) alertEl.style.display = 'none';
+      if (copyBtn) copyBtn.textContent = '📋 Copy ID';
+    }, 3000);
+  }).catch(() => {
+    prompt('Copy your Query ID:', qid);
+  });
+}
+</script>
+{% endblock %}

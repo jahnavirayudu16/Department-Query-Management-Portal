@@ -124,7 +124,7 @@ class Config:
     }
     
     # Priority Levels
-    PRIORITIES = ['Low', 'Medium', 'High', 'Urgent']
+    PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
     
     # Query Statuses
     STATUSES = ['New', 'Assigned', 'In Progress', 'Waiting for User', 'Resolved']
