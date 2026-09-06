@@ -7,22 +7,27 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch('/api/analytics-data')
     .then(res => res.json())
     .then(data => {
-      // 1. Principal Desk Analysis
+      // 1. Branch Analysis for HOD
+      if (data.branch_analysis) {
+        initBranchPillar(data.branch_analysis);
+      }
+
+      // 2. Principal Desk Analysis
       if (data.principal_analysis) {
         initPrincipalPillar(data.principal_analysis);
       }
       
-      // 2. AO Administrative Analysis
+      // 3. AO Administrative Analysis
       if (data.ao_analysis) {
         initAoPillar(data.ao_analysis);
       }
 
-      // 3. Department HODs Analysis
+      // 4. Department HODs Analysis
       if (data.hod_analysis) {
         initHodPillar(data.hod_analysis);
       }
 
-      // 4. Overall Campus Overview
+      // 5. Overall Campus Overview
       initCampusOverview(data);
     })
     .catch(err => console.error('Error loading analytics data:', err));
@@ -44,6 +49,176 @@ function switchAnalyticsTab(tabId, btn) {
   if (btn) {
     btn.classList.add('active');
   }
+}
+
+/* -------------------------------------------------------------
+   0. HOD BRANCH SPECIFIC PILLAR
+------------------------------------------------------------- */
+function initBranchPillar(bData) {
+  const sum = bData.summary || {};
+
+  // Top KPI Summary Cards for HOD
+  setText('branchCardTotal', sum.total ?? 0);
+  setText('branchCardSolved', sum.solved ?? 0);
+  setText('branchCardSolvedPercent', `${sum.solved_percent ?? 0}% Resolution Rate`);
+  setText('branchCardPending', sum.pending ?? 0);
+  setText('branchCardUnassigned', sum.unassigned ?? 0);
+  setText('branchCardUrgent', sum.urgent ?? 0);
+
+  // 1. Academic Topics Chart (Exams, Marks, Labs, Attendance, Syllabus, Assignments)
+  const topicCtx = document.getElementById('branchTopicChart');
+  if (topicCtx && bData.topics && bData.topics.labels.length) {
+    const colors = ['#6366f1', '#8b5cf6', '#0284c7', '#10b981', '#f59e0b', '#ec4899', '#64748b'];
+    new Chart(topicCtx, {
+      type: 'doughnut',
+      data: {
+        labels: bData.topics.labels,
+        datasets: [{
+          data: bData.topics.data,
+          backgroundColor: colors.slice(0, bData.topics.labels.length),
+          borderWidth: 2,
+          borderColor: '#ffffff',
+          hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 11, weight: 'bold' }, padding: 10 } }
+        }
+      }
+    });
+  }
+
+  // 2. Student Year of Study Pie Chart
+  const yrCtx = document.getElementById('branchYearChart');
+  if (yrCtx && bData.years && bData.years.labels.length) {
+    const yrColors = ['#0284c7', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+    new Chart(yrCtx, {
+      type: 'pie',
+      data: {
+        labels: bData.years.labels,
+        datasets: [{
+          data: bData.years.data,
+          backgroundColor: yrColors.slice(0, bData.years.labels.length),
+          borderWidth: 2,
+          borderColor: '#ffffff',
+          hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 11, weight: 'bold' }, padding: 10 } }
+        }
+      }
+    });
+  }
+
+  // 3. Status Lifecycle Doughnut Chart
+  const stCtx = document.getElementById('branchStatusChart');
+  if (stCtx && bData.statuses && bData.statuses.labels.length) {
+    new Chart(stCtx, {
+      type: 'doughnut',
+      data: {
+        labels: bData.statuses.labels,
+        datasets: [{
+          data: bData.statuses.data,
+          backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ec4899'],
+          borderWidth: 2,
+          borderColor: '#ffffff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 10 } } }
+        }
+      }
+    });
+  }
+
+  // 4. Priority & Urgency Levels Chart
+  const prCtx = document.getElementById('branchPriorityChart');
+  if (prCtx && bData.priorities && bData.priorities.labels.length) {
+    const colorMap = { 'Critical': '#dc2626', 'High': '#ea580c', 'Medium': '#f59e0b', 'Low': '#64748b' };
+    const bgColors = bData.priorities.labels.map(l => colorMap[l] || '#64748b');
+    new Chart(prCtx, {
+      type: 'bar',
+      data: {
+        labels: bData.priorities.labels,
+        datasets: [{
+          data: bData.priorities.data,
+          backgroundColor: bgColors,
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // 5. Branch Teaching Staff Workload Table
+  populateBranchStaffTable(bData.staff_workload);
+}
+
+function populateBranchStaffTable(staffList) {
+  const tbody = document.getElementById('branchStaffTableBody');
+  if (!tbody) return;
+
+  if (!staffList || !staffList.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; padding: 2rem; color: #64748b;">
+          ℹ️ No teaching staff / assistant professors currently registered in this department branch.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = '';
+  staffList.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #f1f5f9';
+    tr.innerHTML = `
+      <td style="padding: 0.85rem 1rem;">
+        <strong style="color: #0f172a; display: block;">👩‍🏫 ${s.name}</strong>
+        <span style="font-size: 0.75rem; color: #64748b;">${s.designation}</span>
+      </td>
+      <td style="padding: 0.85rem 1rem; color: #475569; font-size: 0.82rem;">
+        ${s.email}
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 700;">
+        <span class="badge" style="background: #eef2ff; color: #4338ca; font-size: 0.82rem;">${s.assigned}</span>
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 700; color: #059669;">
+        ${s.resolved}
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 700; color: #b45309;">
+        ${s.pending}
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 800; color: ${s.solved_percent >= 70 ? '#059669' : (s.solved_percent >= 40 ? '#b45309' : '#be185d')};">
+        ${s.solved_percent}%
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: right;">
+        <a href="/department" class="btn btn-secondary btn-sm" style="font-size: 0.78rem; font-weight: 700; padding: 4px 10px;">
+          Assign Queries →
+        </a>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 /* -------------------------------------------------------------

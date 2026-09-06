@@ -268,7 +268,27 @@ class TestDQMSystem(unittest.TestCase):
         self.assertEqual(res_prin.status_code, 200)
         self.assertIn(b'Hostel Cleanliness Issue', res_prin.data)
 
+    def test_hod_branch_analytics_view_and_api(self):
+        """Verify that HOD can access /hod/analytics and receive branch-scoped analytics data."""
+        # 1. Login as B.Tech CSE HOD
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res_page = self.client.get('/hod/analytics')
+        self.assertEqual(res_page.status_code, 200)
+        self.assertIn(b'Branch Analytics', res_page.data)
+        self.assertIn(b'tab-branch', res_page.data)
+
+        # 2. Verify API returns branch_analysis
+        res_api = self.client.get('/api/analytics-data')
+        self.assertEqual(res_api.status_code, 200)
+        data = res_api.get_json()
+        self.assertTrue(data['is_hod'])
+        self.assertIn('branch_analysis', data)
+        self.assertIsNotNone(data['branch_analysis'])
+        self.assertEqual(data['branch_analysis']['course'], 'B.Tech')
+        self.assertIn('staff_workload', data['branch_analysis'])
+
 if __name__ == '__main__':
     unittest.main()
+
 
 

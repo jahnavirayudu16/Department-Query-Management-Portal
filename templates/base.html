@@ -87,8 +87,8 @@
         <a href="{{ url_for('department_dashboard') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
           <span class="icon">🎓</span> Department Queue & Assignments
         </a>
-        <a href="{{ url_for('hod_analytics') }}" class="nav-item {% if request.endpoint == 'hod_analytics' %}active{% endif %}">
-          <span class="icon">📈</span> Branch Pie Chart Analytics
+        <a href="{{ url_for('hod_analytics') }}" class="nav-item {% if request.endpoint in ['hod_analytics', 'admin_analytics'] %}active{% endif %}">
+          <span class="icon">📈</span> Branch Analytics & Insights
         </a>
         {% endif %}
 

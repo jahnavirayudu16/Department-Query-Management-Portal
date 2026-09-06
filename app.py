@@ -2156,6 +2156,47 @@ def analytics_data():
         ORDER BY count DESC
     """, params).fetchall()
     
+    # Branch-specific analysis for logged in HOD
+    branch_analysis = None
+    if is_hod:
+        hod_course = user['course'] or 'B.Tech'
+        if hod_course:
+            b_cond = f"(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others')) AND (q.department = '{hod_dept}' OR q.department IS NULL) AND (q.course = '{hod_course}' OR q.course IS NULL)"
+        else:
+            b_cond = f"(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others')) AND (q.department = '{hod_dept}' OR q.department IS NULL)"
+            
+        branch_analysis = compute_pillar(b_cond, hod_topic_sql)
+        branch_analysis['branch_name'] = f"{hod_course} {hod_dept}".strip()
+        branch_analysis['course'] = hod_course
+        branch_analysis['department'] = hod_dept
+        
+        # Branch Staff List with resolution statistics
+        staff_sql = "SELECT id, name, email, designation, role FROM users WHERE role IN ('staff', 'faculty') AND (department = ? OR department IS NULL) AND is_active = 1"
+        staff_params = [hod_dept]
+        if hod_course:
+            staff_sql += " AND (course = ? OR course IS NULL)"
+            staff_params.append(hod_course)
+        staff_sql += " ORDER BY name ASC"
+        
+        staff_rows = db.execute(staff_sql, staff_params).fetchall()
+        staff_workload = []
+        for s in staff_rows:
+            sid = s['id']
+            t_asg = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (sid,)).fetchone()[0]
+            s_res = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved'", (sid,)).fetchone()[0]
+            p_act = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('In Progress', 'Waiting for User', 'Assigned')", (sid,)).fetchone()[0]
+            staff_workload.append({
+                'id': sid,
+                'name': s['name'],
+                'email': s['email'],
+                'designation': s['designation'] or 'Department Staff Resolver',
+                'assigned': t_asg,
+                'resolved': s_res,
+                'pending': p_act,
+                'solved_percent': round((s_res / t_asg * 100), 1) if t_asg > 0 else 0
+            })
+        branch_analysis['staff_workload'] = staff_workload
+
     # Summary Metrics (Campus Overview)
     total_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause}", params).fetchone()[0]
     solved_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause} {'AND' if where_clause else 'WHERE'} q.status = 'Resolved'", params).fetchone()[0]
@@ -2181,9 +2222,11 @@ def analytics_data():
         'is_principal': is_principal,
         'is_admin': is_admin,
         'user_dept': hod_dept,
+        'user_course': user.get('course'),
         'principal_analysis': principal_analysis,
         'ao_analysis': ao_analysis,
         'hod_analysis': hod_analysis,
+        'branch_analysis': branch_analysis,
         'summary': summary,
         'departments': {'labels': [r['dept_name'] for r in dept_rows], 'data': [r['count'] for r in dept_rows]},
         'years': {'labels': [r['year_label'] for r in year_rows], 'data': [r['count'] for r in year_rows]},
