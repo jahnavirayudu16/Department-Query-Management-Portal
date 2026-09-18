@@ -45,14 +45,8 @@
         {% if current_user.role == 'principal' %}
         <!-- Principal Focused Navigation -->
         <div class="nav-section-title">Principal Navigation</div>
-        <a href="{{ url_for('index') }}" class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">
-          <span class="icon">🏠</span> Portal Home
-        </a>
         <a href="{{ url_for('department_dashboard', dept='Others') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
           <span class="icon">📥</span> Received Queries
-        </a>
-        <a href="{{ url_for('track_query') }}" class="nav-item {% if request.endpoint == 'track_query' %}active{% endif %}">
-          <span class="icon">🔍</span> Track Status
         </a>
         <a href="{{ url_for('admin_analytics') }}" class="nav-item {% if request.endpoint in ['admin_analytics', 'hod_analytics'] %}active{% endif %}">
           <span class="icon">📊</span> Analysis
@@ -64,16 +58,18 @@
           <span class="icon">💬</span> Communicate with HOD
         </a>
         {% else %}
-        <!-- Standard Top Navigation -->
+        <!-- Standard Top Navigation (Portal Home for Students Only) -->
+        {% if not current_user or current_user.role == 'student' %}
         <a href="{{ url_for('index') }}" class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">
           <span class="icon">🏠</span> Portal Home
         </a>
         <a href="{{ url_for('track_query') }}" class="nav-item {% if request.endpoint == 'track_query' %}active{% endif %}">
           <span class="icon">🔍</span> Track Query Status
         </a>
+        {% endif %}
 
-        {% if current_user.role in ['student', 'faculty'] %}
-        <div class="nav-section-title">My Workspace (Personal)</div>
+        {% if current_user.role == 'student' %}
+        <div class="nav-section-title">Student Workspace</div>
         <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
           <span class="icon">📊</span> My Queries
         </a>
@@ -84,8 +80,14 @@
 
         {% if current_user.role == 'hod' %}
         <div class="nav-section-title">HOD Management Desk</div>
-        <a href="{{ url_for('department_dashboard') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
-          <span class="icon">🎓</span> Department Queue & Assignments
+        <a href="{{ url_for('department_dashboard', view='received') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and (request.args.get('view') in ['received', 'all'] or not request.args.get('view')) %}active{% endif %}">
+          <span class="icon">📥</span> Received Queries
+        </a>
+        <a href="{{ url_for('department_dashboard', view='assigned') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and request.args.get('view') == 'assigned' %}active{% endif %}">
+          <span class="icon">📌</span> Assigned Queries (from Principal)
+        </a>
+        <a href="{{ url_for('department_dashboard', view='delegated') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and request.args.get('view') == 'delegated' %}active{% endif %}">
+          <span class="icon">👩‍🏫</span> Delegated to Staff
         </a>
         <a href="{{ url_for('hod_analytics') }}" class="nav-item {% if request.endpoint in ['hod_analytics', 'admin_analytics'] %}active{% endif %}">
           <span class="icon">📈</span> Branch Analytics & Insights
@@ -93,22 +95,33 @@
         {% endif %}
 
         {% if current_user.role in ['staff', 'office_staff', 'faculty'] %}
-        <div class="nav-section-title">{% if current_user.role == 'office_staff' %}Office Staff Desk{% else %}Department Desk (Resolver){% endif %}</div>
-        <a href="{{ url_for('department_dashboard') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
-          <span class="icon">📥</span> My Assigned Queries
+        <div class="nav-section-title">{% if current_user.role == 'office_staff' %}Office Staff Desk{% elif current_user.role == 'faculty' %}Faculty Workspace{% else %}Department Resolver Desk{% endif %}</div>
+        <a href="{{ url_for('department_dashboard', view='received') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and request.args.get('view') == 'received' %}active{% endif %}">
+          <span class="icon">📥</span> Received Queries
+        </a>
+        <a href="{{ url_for('department_dashboard', view='assigned') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and (request.args.get('view') == 'assigned' or not request.args.get('view')) %}active{% endif %}">
+          <span class="icon">📌</span> Assigned Queries (from HOD/Principal)
         </a>
         <a href="{{ url_for('submit_query') }}" class="nav-item {% if request.endpoint == 'submit_query' %}active{% endif %}">
           <span class="icon">✍️</span> Post Query
         </a>
+        {% if current_user.role == 'faculty' %}
+        <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+          <span class="icon">📊</span> My Submitted Queries
+        </a>
+        {% endif %}
         {% endif %}
 
         {% if current_user.role == 'ao' %}
         <div class="nav-section-title">Administrative Desk (AO)</div>
-        <a href="{{ url_for('department_dashboard', dept='Administrative') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
-          <span class="icon">🏢</span> Administrative Queue
+        <a href="{{ url_for('department_dashboard', dept='Administrative', view='received') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and (request.args.get('view') in ['received', 'all'] or not request.args.get('view')) %}active{% endif %}">
+          <span class="icon">📥</span> Received Queries
+        </a>
+        <a href="{{ url_for('department_dashboard', dept='Administrative', view='assigned') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and request.args.get('view') == 'assigned' %}active{% endif %}">
+          <span class="icon">📌</span> Assigned Queries (from Principal)
         </a>
         <a href="{{ url_for('admin_analytics') }}" class="nav-item {% if request.endpoint in ['admin_analytics', 'hod_analytics'] %}active{% endif %}">
-          <span class="icon">📈</span> AO & HOD Status Analytics
+          <span class="icon">📈</span> AO & Status Analytics
         </a>
         {% endif %}
 
@@ -193,6 +206,13 @@
         </div>
 
         <div class="topbar-right">
+          {% if not current_user or current_user.role == 'student' %}
+          <!-- Back to Portal Home Navigation (Students & Guests Only) -->
+          <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" title="Back to Portal Home" style="font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
+            🏠 Back to Portal Home
+          </a>
+          {% endif %}
+
           <!-- Notification Bell Dropdown -->
           <div class="notif-wrapper">
             <button class="notif-btn" id="notifBtn" aria-label="Notifications" title="Notifications">

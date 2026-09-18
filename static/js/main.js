@@ -115,7 +115,23 @@ function initSocketGlobal() {
       } else {
         b.style.background = '#f1f5f9';
         b.style.color = '#64748b';
-        if (textEl) textEl.textContent = data.last_active || 'Offline';
+        if (textEl) textEl.textContent = data.last_active || 'Recently';
+      }
+    });
+
+    const dots = document.querySelectorAll(`.user-presence-dot[data-user-id="${data.user_id}"]`);
+    dots.forEach(dot => {
+      dot.style.background = data.is_online ? '#16a34a' : '#94a3b8';
+    });
+
+    const textEls = document.querySelectorAll(`.user-presence-text[data-user-id="${data.user_id}"]`);
+    textEls.forEach(el => {
+      if (data.is_online) {
+        el.textContent = '🟢 Online Now';
+        el.style.color = '#16a34a';
+      } else {
+        el.textContent = data.last_active || 'Recently';
+        el.style.color = '#64748b';
       }
     });
   });

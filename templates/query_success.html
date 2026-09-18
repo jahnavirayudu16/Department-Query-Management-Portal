@@ -58,7 +58,7 @@
         </div>
         <div>
           <span style="color: #64748b; display: block; font-size: 0.75rem;">Priority Level:</span>
-          <span class="badge badge-{{ query.priority.lower() }}">{{ query.priority }}</span>
+          <span class="badge badge-{{ (query.priority or 'Medium') | lower }}">{{ query.priority or 'Medium' }}</span>
         </div>
       </div>
 
@@ -78,9 +78,15 @@
 
     <!-- Actions -->
     <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+      {% if current_user and current_user.role != 'student' %}
+      <a href="{{ url_for('query_details', query_id=query.id) }}" class="btn btn-primary btn-lg" style="font-weight: 800; padding: 0.85rem; font-size: 1.05rem; box-shadow: var(--shadow-md);">
+        📋 View in Resolution Desk →
+      </a>
+      {% else %}
       <a href="{{ url_for('track_query', query_id=query.id) }}" class="btn btn-primary btn-lg" style="font-weight: 800; padding: 0.85rem; font-size: 1.05rem; box-shadow: var(--shadow-md);">
         🔍 Track Query Status & Live Chat →
       </a>
+      {% endif %}
       
       <div style="display: flex; gap: 0.75rem; justify-content: center; margin-top: 0.5rem;">
         <a href="{{ url_for('submit_query') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">

@@ -100,11 +100,11 @@
     <div style="display: flex; align-items: center; gap: 0.75rem;">
       <span style="font-size: 1.3rem;">🚨</span>
       <div>
-        <strong>ATTENTION:</strong> You have <strong>{{ stats.urgent }} Urgent query/queries</strong> requiring immediate action!
+        <strong>ATTENTION:</strong> You have <strong>{{ stats.urgent }} Critical / Urgent query/queries</strong> requiring immediate action!
       </div>
     </div>
-    <a href="{{ url_for('department_dashboard', dept=dept, priority='Urgent') }}" class="btn btn-secondary btn-sm" style="background: #ffffff; color: #b91c1c; font-weight: 700;">
-      View Urgent Queries →
+    <a href="{{ url_for('department_dashboard', dept=dept, priority='Critical') }}" class="btn btn-secondary btn-sm" style="background: #ffffff; color: #b91c1c; font-weight: 700;">
+      View Critical / Urgent Queries →
     </a>
   </div>
   {% endif %}
@@ -150,21 +150,52 @@
 
   <!-- Quick Views & Filter Bar -->
   <div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem;">
-    <!-- View Switcher Tabs -->
+    <!-- View Switcher Tabs: Received, Assigned (From Principal), Delegated, Unassigned, Unresolved, Resolved -->
     <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.75rem; flex-wrap: wrap;">
-      <a href="{{ url_for('department_dashboard', dept=dept, view='unresolved') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unresolved' or not current_view %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
-        ⏳ Unresolved Problems ({{ unresolved_count }})
+      
+      <!-- 1. Received Queries Tab -->
+      <a href="{{ url_for('department_dashboard', dept=dept, view='received') }}" class="btn btn-sm" style="font-weight: 800; {% if (current_view in ['received', 'all'] and current_user.role not in ['staff', 'faculty', 'office_staff']) or (current_view == 'received') or (current_user.role in ['hod', 'ao', 'principal', 'admin'] and not current_view) %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
+        📥 Received Queries ({{ total_dept_count }})
       </a>
-      {% if current_user.role in ['hod', 'admin'] %}
+
+      <!-- 2. Assigned Queries Tab -->
+      {% if current_user.role == 'hod' %}
+      <a href="{{ url_for('department_dashboard', dept=dept, view='assigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'assigned' %}background: #4f46e5; color: #fff; border: none;{% else %}background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;{% endif %} padding: 0.45rem 0.9rem;">
+        📌 Assigned Queries (From Principal) ({{ assigned_count }})
+      </a>
+      <a href="{{ url_for('department_dashboard', dept=dept, view='delegated') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'delegated' %}background: #0284c7; color: #fff; border: none;{% else %}background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd;{% endif %} padding: 0.45rem 0.9rem;">
+        👩‍🏫 Delegated to Staff ({{ delegated_count }})
+      </a>
+      {% elif current_user.role in ['staff', 'faculty', 'office_staff'] %}
+      <a href="{{ url_for('department_dashboard', dept=dept, view='assigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'assigned' or not current_view %}background: #4f46e5; color: #fff; border: none;{% else %}background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;{% endif %} padding: 0.45rem 0.9rem;">
+        📌 Assigned Queries ({{ assigned_count }})
+      </a>
+      {% elif current_user.role in ['ao', 'principal', 'admin'] %}
+      <a href="{{ url_for('department_dashboard', dept=dept, view='assigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'assigned' %}background: #4f46e5; color: #fff; border: none;{% else %}background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;{% endif %} padding: 0.45rem 0.9rem;">
+        📌 Assigned Queries ({{ assigned_count }})
+      </a>
+      {% endif %}
+
+      <!-- 3. Unassigned Queries Tab -->
+      {% if current_user.role in ['hod', 'admin', 'ao', 'principal'] %}
       <a href="{{ url_for('department_dashboard', dept=dept, view='unassigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unassigned' %}background: #dc2626; color: #fff; border: none;{% else %}background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;{% endif %} padding: 0.45rem 0.9rem;">
         ⚡ Unassigned ({{ unassigned_count }})
       </a>
       {% endif %}
-      <a href="{{ url_for('department_dashboard', dept=dept, view='recent') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'recent' %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
-        🆕 Recently Added
+
+      <!-- 4. Unresolved Queries Tab -->
+      <a href="{{ url_for('department_dashboard', dept=dept, view='unresolved') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'unresolved' %}background: #d97706; color: #fff; border: none;{% else %}background: #fffbeb; color: #92400e; border: 1px solid #fde68a;{% endif %} padding: 0.45rem 0.9rem;">
+        ⏳ Unresolved ({{ unresolved_count }})
       </a>
-      <a href="{{ url_for('department_dashboard', dept=dept, view='all') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'all' %}background: var(--primary); color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
-        📋 {% if current_user.role in ['staff', 'faculty'] %}All Assigned Problems{% else %}All Department Problems{% endif %} ({{ total_dept_count }})
+
+      <!-- 5. Resolved Queries Tab -->
+      <a href="{{ url_for('department_dashboard', dept=dept, view='resolved') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'resolved' %}background: #16a34a; color: #fff; border: none;{% else %}background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;{% endif %} padding: 0.45rem 0.9rem;">
+        ✅ Resolved ({{ resolved_count }})
+      </a>
+
+      <!-- 6. Recently Added Tab -->
+      <a href="{{ url_for('department_dashboard', dept=dept, view='recent') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'recent' %}background: #0284c7; color: #fff; border: none;{% else %}background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;{% endif %} padding: 0.45rem 0.9rem;">
+        🆕 Recently Added
       </a>
     </div>
 
@@ -212,7 +243,7 @@
           <th>Title & Category</th>
           <th>Submitter</th>
           <th>Status</th>
-          <th>Assigned Staff</th>
+          <th>Assigned Resolver</th>
           <th>Submitted</th>
           <th>Action</th>
         </tr>
@@ -220,11 +251,11 @@
       <tbody>
         {% if queries %}
           {% for q in queries %}
-          <tr {% if q.priority == 'Urgent' and q.status != 'Resolved' %}style="background-color: #fff1f2;"{% endif %}>
+          <tr {% if q.priority in ['Critical', 'Urgent'] and q.status != 'Resolved' %}style="background-color: #fff1f2; border-left: 4px solid #ef4444;"{% endif %}>
             <td style="font-weight: 700; color: var(--primary);">#{{ q.id }}</td>
             <td>
               <span class="badge badge-{{ q.priority | lower }}">
-                {% if q.priority == 'Urgent' %}🚨{% endif %} {{ q.priority }}
+                {% if q.priority in ['Critical', 'Urgent'] %}🚨{% endif %} {{ q.priority }}
               </span>
             </td>
             <td>
@@ -251,8 +282,14 @@
               <span class="badge badge-status-{{ q.status | lower | replace(' ', '-') }}">{{ q.status }}</span>
             </td>
             <td>
-              {% if q.staff_name %}
-                <span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">👤 {{ q.staff_name }}</span>
+              {% if q.assigned_staff_id == current_user.id and current_user.role == 'hod' %}
+                <span class="badge" style="background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; font-size: 0.78rem; font-weight: 800; padding: 3px 8px;">
+                  🎓 Assigned to You (From Principal)
+                </span>
+              {% elif q.staff_name %}
+                <span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">
+                  👤 {{ q.staff_name }}
+                </span>
               {% else %}
                 <span style="font-size: 0.8rem; color: var(--warning); font-weight: 600;">⚠️ Unassigned</span>
               {% endif %}
@@ -262,9 +299,17 @@
             </td>
             <td>
               <a href="{{ url_for('query_details', query_id=q.id) }}" class="btn btn-primary btn-sm" style="font-weight: 700; white-space: nowrap;">
-                {% if current_user.role == 'ao' and not q.assigned_staff_id %}
+                {% if current_user.role == 'hod' %}
+                  {% if q.assigned_staff_id == current_user.id %}
+                    ⚡ Solve / Assign Staff →
+                  {% elif not q.assigned_staff_id %}
+                    ⚡ Solve / Assign Staff →
+                  {% else %}
+                    Open & Manage →
+                  {% endif %}
+                {% elif current_user.role == 'ao' and not q.assigned_staff_id %}
                   Assign Office Staff →
-                {% elif current_user.role in ['hod', 'principal', 'admin'] and not q.assigned_staff_id %}
+                {% elif current_user.role in ['principal', 'admin'] and not q.assigned_staff_id %}
                   Assign Staff & Reply →
                 {% else %}
                   Open & Reply →

@@ -1,1 +1,1 @@
-web: gunicorn -w 1 --threads 100 app:app
+# Render deployment configuration removed

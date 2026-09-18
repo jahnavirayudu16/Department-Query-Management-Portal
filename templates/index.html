@@ -18,23 +18,302 @@
     </p>
   </div>
 
-  <!-- 3 Primary Portal Gateways: Student, Faculty, Track Query Status -->
+  <!-- Portal Gateways -->
+  {% if current_user and current_user.role != 'student' %}
+  <!-- Staff & Executive Management Gateways -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+    
+    {% if current_user.role == 'hod' %}
+    <!-- HOD Gateway 1: Department Command Center -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #4f46e5; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #eef2ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #c7d2fe;">
+          🎓
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.5rem;">Department Desk</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Manage academic received queries, principal assignments, and delegate to department staff resolvers.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('department_dashboard') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);">
+          🎓 Open Department Queue →
+        </a>
+      </div>
+    </div>
+
+    <!-- HOD Gateway 2: Branch Analytics -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #0284c7; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #f0f9ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #bae6fd;">
+          📊
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #0c4a6e; margin: 0 0 0.5rem;">Branch Analytics</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          View real-time resolution metrics, staff workloads, and SLA compliance insights for your branch.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('hod_analytics') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #0284c7; border-color: #0284c7;">
+          📊 View Analytics →
+        </a>
+      </div>
+    </div>
+
+    <!-- HOD Gateway 3: Post Internal Query -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #10b981; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #ecfdf5; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #a7f3d0;">
+          ✍️
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #064e3b; margin: 0 0 0.5rem;">Post Internal Query</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Submit department-level facility or administrative requirements to Principal & AO desks.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('submit_query') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #10b981; border-color: #10b981;">
+          ✍️ Post Query →
+        </a>
+      </div>
+    </div>
+
+    {% elif current_user.role == 'ao' %}
+    <!-- AO Gateway 1: Administrative Queue -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #0284c7; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #f0f9ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #bae6fd;">
+          🏢
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #0c4a6e; margin: 0 0 0.5rem;">Administrative Queue</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Manage fees, certificates, scholarships, bus passes, and assign to Office Staff resolvers.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('department_dashboard', dept='Administrative') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #0284c7; border-color: #0284c7;">
+          🏢 Open Admin Queue →
+        </a>
+      </div>
+    </div>
+
+    <!-- AO Gateway 2: Analytics -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #4f46e5; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #eef2ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #c7d2fe;">
+          📊
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.5rem;">Status Analytics</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Monitor department-wide query resolution rates and office staff efficiency metrics.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('admin_analytics') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem;">
+          📊 View Analytics →
+        </a>
+      </div>
+    </div>
+
+    <!-- AO Gateway 3: Post Query -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #10b981; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #ecfdf5; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #a7f3d0;">
+          ✍️
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #064e3b; margin: 0 0 0.5rem;">Post Query</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Log campus maintenance, infrastructure, or inter-departmental requests.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('submit_query') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #10b981; border-color: #10b981;">
+          ✍️ Post Query →
+        </a>
+      </div>
+    </div>
+
+    {% elif current_user.role == 'principal' %}
+    <!-- Principal Gateway 1: Received Queries -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #d97706; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #fffbeb; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #fde68a;">
+          🏛️
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #92400e; margin: 0 0 0.5rem;">Principal Desk</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Manage campus support, facility maintenance, and student grievances with direct HOD delegation.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('department_dashboard', dept='Others') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #d97706; border-color: #d97706;">
+          🏛️ Open Received Queries →
+        </a>
+      </div>
+    </div>
+
+    <!-- Principal Gateway 2: 3-Pillar Analytics -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #4f46e5; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #eef2ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #c7d2fe;">
+          📊
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.5rem;">3-Pillar Analytics</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Executive analytics across Academics, Administrative, and Campus Support pillars.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('admin_analytics') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem;">
+          📊 View Analytics →
+        </a>
+      </div>
+    </div>
+
+    <!-- Principal Gateway 3: Communicate with HOD -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #0284c7; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #f0f9ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #bae6fd;">
+          💬
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #0c4a6e; margin: 0 0 0.5rem;">Message HODs</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Broadcast urgent campus instructions or start direct one-on-one chats with branch HODs.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('admin_communicate_hod') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #0284c7; border-color: #0284c7;">
+          💬 Message HODs →
+        </a>
+      </div>
+    </div>
+
+    {% elif current_user.role == 'admin' %}
+    <!-- Admin Gateways -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #4f46e5; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #eef2ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #c7d2fe;">
+          ⚡
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.5rem;">Admin Cockpit</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Campus-wide control center for all academic, administrative, and maintenance queries.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem;">
+          ⚡ Open Cockpit →
+        </a>
+      </div>
+    </div>
+
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #0284c7; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #f0f9ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #bae6fd;">
+          📊
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #0c4a6e; margin: 0 0 0.5rem;">Campus Analytics</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Visual charts, category breakdowns, and SLA performance statistics across the institute.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('admin_analytics') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #0284c7; border-color: #0284c7;">
+          📊 View Analytics →
+        </a>
+      </div>
+    </div>
+
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #10b981; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #ecfdf5; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #a7f3d0;">
+          👥
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #064e3b; margin: 0 0 0.5rem;">Users & Roles</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Manage HODs, AO, Office Staff, and Faculty resolver accounts and permissions.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('admin_users') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #10b981; border-color: #10b981;">
+          👥 Manage Users →
+        </a>
+      </div>
+    </div>
+    {% elif current_user.role in ['staff', 'faculty', 'office_staff'] %}
+    <!-- Staff / Faculty / Office Staff Gateways -->
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #0284c7; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #f0f9ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #bae6fd;">
+          📥
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #0c4a6e; margin: 0 0 0.5rem;">My Assigned Queries</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Review and resolve queries assigned to you by {% if current_user.role == 'office_staff' %}Administrative Officer (AO){% else %}Department HOD{% endif %}.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('department_dashboard') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #0284c7; border-color: #0284c7;">
+          📥 Open Resolution Queue →
+        </a>
+      </div>
+    </div>
+
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #4f46e5; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #eef2ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #c7d2fe;">
+          📊
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.5rem;">My Workspace</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          View all personal queries submitted by you, chat with authorities, and track resolutions.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem;">
+          📊 My Queries Dashboard →
+        </a>
+      </div>
+    </div>
+
+    <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #10b981; display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow-md);">
+      <div>
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #ecfdf5; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #a7f3d0;">
+          ✍️
+        </div>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #064e3b; margin: 0 0 0.5rem;">Post Query</h2>
+        <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
+          Submit academic, administrative, or facility issues directly to concerned desks.
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('submit_query') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; background: #10b981; border-color: #10b981;">
+          ✍️ Post Query →
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {% else %}
+  <!-- Standard Gateways for Students, General Public & Faculty -->
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
 
-    <!-- 1. STUDENT GATEWAY -->
+    <!-- 1. POST QUERY GATEWAY -->
     <div class="card gateway-card" style="padding: 2.25rem 1.75rem; text-align: center; border-top: 5px solid #4f46e5; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.25s, box-shadow 0.25s; box-shadow: var(--shadow-md);">
       <div>
         <div style="width: 64px; height: 64px; border-radius: 50%; background: #eef2ff; font-size: 2.2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; border: 2px solid #c7d2fe;">
-          👨‍🎓
+          ✍️
         </div>
-        <h2 style="font-size: 1.45rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.5rem;">Student</h2>
+        <h2 style="font-size: 1.45rem; font-weight: 800; color: #1e1b4b; margin: 0 0 0.5rem;">Post Query</h2>
         <p style="font-size: 0.88rem; color: #475569; line-height: 1.5; margin: 0 0 1.5rem;">
-          Direct query submission with zero password or registration required. Choose your program, course, branch, and year to submit your problem.
+          Direct query submission for <strong>Students</strong> and <strong>Faculty</strong> with zero mandatory password. Select your profile type and academic branch to submit your problem.
         </p>
       </div>
       <div>
         <a href="{{ url_for('submit_query') }}" class="btn btn-primary btn-lg" style="width: 100%; font-weight: 800; padding: 0.8rem 1.25rem; font-size: 1rem; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);">
-          ✍️ Post Student Query →
+          ✍️ Post Query →
         </a>
       </div>
     </div>
@@ -79,6 +358,7 @@
     </div>
 
   </div>
+  {% endif %}
 
   <!-- Key Routing Core Highlights -->
   <div class="card" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 1.75rem; border-radius: var(--radius-md);">

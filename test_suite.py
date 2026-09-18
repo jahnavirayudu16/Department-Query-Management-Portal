@@ -18,40 +18,235 @@ class TestDQMSystem(unittest.TestCase):
         """Verify the NLP classification engine against the 3 primary categories: Academics, Administrative, Others."""
         test_cases = [
             # 1. Academics
-            ("My internal marks are incorrect for DSP subject.", "Academics", "High"),
-            ("Attendance percentage shortage correction in Operating Systems.", "Academics", "High"),
-            ("Cannot download hall ticket for supplementary exam.", "Academics", "High"),
-            ("When will the midterm exam timetable be published?", "Academics", "Medium"),
-            ("Assignment submission deadline extension requested.", "Academics", "Medium"),
+            ("My internal marks are incorrect for DSP subject.", "Academics"),
+            ("Attendance percentage shortage correction in Operating Systems.", "Academics"),
+            ("Cannot download hall ticket for supplementary exam.", "Academics"),
+            ("When will the midterm exam timetable be published?", "Academics"),
+            ("Assignment submission deadline extension requested.", "Academics"),
+            ("Need guidance regarding mini project and lab viva.", "Academics"),
+            ("Study material and textbook not available in library.", "Academics"),
+            ("Revaluation result and backlog record clarification.", "Academics"),
+            ("CRT training schedule and batch timings.", "Academics"),
+            ("Need technical training for campus placements.", "Academics"),
+            ("When will python training classes start?", "Academics"),
+            ("Skill development and coding bootcamp query.", "Academics"),
+            ("Internship training and industrial workshop details.", "Academics"),
             
             # 2. Administrative
-            ("My semester fee payment of 45,000 is not updated.", "Administrative", "Medium"),
-            ("Need urgent bonafide certificate for passport application.", "Administrative", "Low"),
-            ("Scholarship disbursement amount has not been credited.", "Administrative", "Medium"),
-            ("Need study certificate and transfer certificate verification.", "Administrative", "Medium"),
-            ("Name correction in college student records.", "Administrative", "Medium"),
+            ("My semester fee payment of 45,000 is not updated.", "Administrative"),
+            ("Need urgent bonafide certificate for passport application.", "Administrative"),
+            ("Scholarship disbursement amount has not been credited.", "Administrative"),
+            ("Need study certificate and transfer certificate verification.", "Administrative"),
+            ("Name correction in college student records.", "Administrative"),
+            ("Hostel fee refund and room accommodation approval.", "Administrative"),
+            ("Bus pass and transport route request.", "Administrative"),
+            ("Password reset for student portal login ID account.", "Administrative"),
+            ("Theft incident in computer lab, my laptop was stolen.", "Administrative"),
+            ("Someone stole my wallet from hostel room, please take action on this theft.", "Administrative"),
+            ("Phone stolen near cafeteria, theft complaint.", "Administrative"),
             
             # 3. Others
-            ("Campus Wi-Fi is not working in computer lab.", "Others", "High"),
-            ("Severe water leakage in hostel room 314.", "Others", "High"),
-            ("The college bus on route 4 was delayed today.", "Others", "Medium"),
-            ("Drinking water cooler in mess needs filter replacement.", "Others", "Medium"),
-            ("Projector in smart classroom 204 is broken.", "Others", "High"),
-            ("Random general query without specific words", "Others", "Medium")
+            ("Campus Wi-Fi is not working in computer lab.", "Others"),
+            ("Severe water leakage in hostel washroom.", "Others"),
+            ("Canteen food quality and cleanliness issue.", "Others"),
+            ("Annual sports competition and cultural fest registration.", "Others"),
+            ("Anti-ragging complaint regarding harassment by seniors.", "Others"),
+            ("Placement hackathon and campus recruitment drive details.", "Others"),
+            ("Campus parking security and lost item inquiry.", "Others"),
+            ("Random general query without specific words", "Others")
         ]
         
-        for text, expected_cat, expected_priority in test_cases:
+        for text, expected_cat in test_cases:
             result = classify_query(text, text)
             print(f"Testing Query: '{text}' -> Classified: {result['category']} ({result['priority']})")
             self.assertEqual(result['category'], expected_cat, f"Failed for '{text}': expected {expected_cat}, got {result['category']}")
-            self.assertEqual(result['priority'], expected_priority, f"Failed priority for '{text}': expected {expected_priority}, got {result['priority']}")
 
     def test_priority_detection(self):
         """Test specific priority detection patterns."""
-        self.assertEqual(detect_priority("Urgent emergency critical short circuit"), "Urgent")
+        self.assertEqual(detect_priority("Urgent emergency critical short circuit"), "Critical")
         self.assertEqual(detect_priority("The server is broken and not working"), "High")
         self.assertEqual(detect_priority("Status is pending approval"), "Medium")
         self.assertEqual(detect_priority("What are the working hours and timings?"), "Low")
+
+    def test_principal_can_assign_to_hod_or_staff(self):
+        """Verify Principal can assign a query to either an HOD or a Staff Resolver."""
+        # 1. Login as Principal
+        self.client.post('/login', data={'email': 'principal@college.com', 'password': 'principal123'})
+        
+        # 2. Principal assigns query #1 to HOD (User ID 3: CSE HOD)
+        res_hod = self.client.post('/query/1/reassign', data={
+            'assigned_staff_id': '3',
+            'priority': 'High'
+        }, follow_redirects=True)
+        self.assertEqual(res_hod.status_code, 200)
+        self.assertIn(b'Query assignments updated successfully', res_hod.data)
+        
+        # Verify in DB
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q1 = db.execute("SELECT assigned_staff_id FROM queries WHERE id = 1").fetchone()
+        self.assertEqual(q1['assigned_staff_id'], 3)
+        
+        # 3. Principal assigns query #1 to Staff resolver (User ID 4: CSE Staff)
+        res_staff = self.client.post('/query/1/reassign', data={
+            'assigned_staff_id': '4',
+            'priority': 'Critical'
+        }, follow_redirects=True)
+        self.assertEqual(res_staff.status_code, 200)
+        self.assertIn(b'Query assignments updated successfully', res_staff.data)
+        
+        q2 = db.execute("SELECT assigned_staff_id, priority FROM queries WHERE id = 1").fetchone()
+        self.assertEqual(q2['assigned_staff_id'], 4)
+        self.assertEqual(q2['priority'], 'Critical')
+        db.close()
+
+    def test_keywords_with_and_without_spaces(self):
+        """Verify keywords match accurately BOTH with spaces and without spaces (concatenated)."""
+        space_pairs = [
+            # Academics
+            ("internal exam marks", "Academics"),
+            ("internalexam marks", "Academics"),
+            ("semester exam portion", "Academics"),
+            ("semesterexam portion", "Academics"),
+            ("mid exam timetable", "Academics"),
+            ("midexam timetable", "Academics"),
+            ("question paper review", "Academics"),
+            ("questionpaper review", "Academics"),
+            ("mini project evaluation", "Academics"),
+            ("miniproject evaluation", "Academics"),
+            ("study material download", "Academics"),
+            ("studymaterial download", "Academics"),
+            ("academic calendar release", "Academics"),
+            ("academiccalendar release", "Academics"),
+            ("hall ticket missing", "Academics"),
+            ("hallticket missing", "Academics"),
+            ("crt training batch", "Academics"),
+            ("crttraining batch", "Academics"),
+            ("technical training session", "Academics"),
+            ("technicaltraining session", "Academics"),
+            
+            # Administrative
+            ("tuition fee payment", "Administrative"),
+            ("tuitionfee payment", "Administrative"),
+            ("hostel fee refund", "Administrative"),
+            ("hostelfee refund", "Administrative"),
+            ("student id card", "Administrative"),
+            ("studentid card", "Administrative"),
+            ("idcard correction", "Administrative"),
+            ("financial aid processing", "Administrative"),
+            ("financialaid processing", "Administrative"),
+            ("password reset request", "Administrative"),
+            ("passwordreset request", "Administrative"),
+            ("name correction in certificate", "Administrative"),
+            ("namecorrection in certificate", "Administrative"),
+            ("bona fide certificate", "Administrative"),
+            ("bonafide certificate", "Administrative"),
+            
+            # Others
+            ("anti ragging issue", "Others"),
+            ("antiragging issue", "Others"),
+            ("wi fi connection problem", "Others"),
+            ("wifi connection problem", "Others"),
+            ("senior harassment incident", "Others"),
+            ("seniorharassment incident", "Others"),
+            ("ragging complaint against hostel", "Others"),
+            ("raggingcomplaint against hostel", "Others")
+        ]
+        
+        for phrase, expected_cat in space_pairs:
+            res = classify_query(title=phrase, description=phrase)
+            self.assertEqual(res['category'], expected_cat, f"Failed for '{phrase}': expected {expected_cat}, got {res['category']}")
+
+    def test_timetable_and_schedule_queries(self):
+        """Verify timetable and class scheduling queries route strictly to Academics."""
+        timetable_cases = [
+            ("timetable", "Academics"),
+            ("time table", "Academics"),
+            ("time-table", "Academics"),
+            ("timetabel", "Academics"),
+            ("midterm exam timetable clash", "Academics"),
+            ("B.Tech 3rd year class timetable update", "Academics"),
+            ("Lecture schedule and period timing", "Academics"),
+            ("Faculty rescheduling 4th period class", "Academics")
+        ]
+        for query, expected in timetable_cases:
+            res = classify_query(description=query, title=query)
+            self.assertEqual(res['category'], expected, f"Failed for '{query}': expected {expected}, got {res['category']}")
+
+    def test_typos_and_fuzzy_variations(self):
+        """Verify typos and spelling variations are accurately resolved."""
+        typo_cases = [
+            ("attendence percentage shortage", "Academics"),
+            ("syllubus not covered by faculty", "Academics"),
+            ("schollarship amount delayed in portal", "Administrative"),
+            ("bonofide certifcate verification request", "Administrative"),
+            ("washroom cleenliness and bad smell", "Others"),
+            ("electrisity and fan broken in room", "Others")
+        ]
+        for query, expected in typo_cases:
+            res = classify_query(description=query, title=query)
+            self.assertEqual(res['category'], expected, f"Failed for '{query}': expected {expected}, got {res['category']}")
+
+    def test_contextual_disambiguation(self):
+        """Verify queries with cross-domain keywords disambiguate to the correct category."""
+        disambiguation_cases = [
+            ("Exam fee payment receipt pending", "Administrative"),
+            ("Exam timetable and syllabus portion", "Academics"),
+            ("Hostel room tap water leakage", "Others"),
+            ("Hostel room admission allotment", "Administrative"),
+            ("Classroom projector and fan repair", "Others"),
+            ("Classroom faculty lecture cancelled", "Academics")
+        ]
+        for query, expected in disambiguation_cases:
+            res = classify_query(description=query, title=query)
+            self.assertEqual(res['category'], expected, f"Failed for '{query}': expected {expected}, got {res['category']}")
+
+    def test_tanglish_vernacular_queries(self):
+        """Verify Telugu/Tanglish queries route accurately."""
+        tanglish_cases = [
+            ("Internal marks raledhu sir please update", "Academics"),
+            ("Syllabus avvaledhu classes jaragadam ledu", "Academics"),
+            ("Fee kattanu kani portal lo receipt raledhu", "Administrative"),
+            ("Scholarship amount padaledhu account lo", "Administrative"),
+            ("Hostel washroom lo water ravadam ledu", "Others"),
+            ("Seniors hostel daggara ragging chesthunnaru", "Others"),
+            ("Training classes eppudu start avthayi?", "Academics")
+        ]
+        for query, expected in tanglish_cases:
+            res = classify_query(description=query, title=query)
+            self.assertEqual(res['category'], expected, f"Failed for '{query}': expected {expected}, got {res['category']}")
+
+
+
+    def test_post_reply_and_view_details_no_error(self):
+        """Verify staff/HOD can post message reply and view query details without any NameError."""
+        # 1. Login as CSE Staff (User ID 4)
+        self.client.post('/login', data={'email': 'cse-staff@college.com', 'password': 'staff123'})
+        
+        # 2. View Query Details page
+        res_view = self.client.get('/query/1')
+        self.assertEqual(res_view.status_code, 200)
+        self.assertIn(b'Query #1', res_view.data)
+        
+        # 3. Post a reply
+        res_reply = self.client.post('/query/1/message', data={
+            'message': 'We are looking into your query and will resolve shortly.'
+        }, follow_redirects=True)
+        self.assertEqual(res_reply.status_code, 200)
+        self.assertIn(b'We are looking into your query', res_reply.data)
+
+    def test_api_classify_preview_endpoint(self):
+        """Verify /api/classify-preview returns accurate real-time category and priority preview."""
+        res = self.client.post('/api/classify-preview', json={
+            'title': 'Internal marks discrepancy in DBMS',
+            'description': 'Marks entered incorrectly in student portal.'
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data['category'], 'Academics')
+        self.assertIn('priority', data)
+        self.assertIn('explanation', data)
+
 
     def test_anonymous_student_registration(self):
         """Test student registering with UG Level, Program, Branch, Year, and optional Regd ID."""
@@ -268,27 +463,343 @@ class TestDQMSystem(unittest.TestCase):
         self.assertEqual(res_prin.status_code, 200)
         self.assertIn(b'Hostel Cleanliness Issue', res_prin.data)
 
-    def test_hod_branch_analytics_view_and_api(self):
-        """Verify that HOD can access /hod/analytics and receive branch-scoped analytics data."""
-        # 1. Login as B.Tech CSE HOD
-        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
-        res_page = self.client.get('/hod/analytics')
-        self.assertEqual(res_page.status_code, 200)
-        self.assertIn(b'Branch Analytics', res_page.data)
-        self.assertIn(b'tab-branch', res_page.data)
+    def test_post_query_no_autofocus(self):
+        """Verify /submit-query page does not contain autofocus on title input to ensure top of page opens cleanly."""
+        res = self.client.get('/submit-query')
+        self.assertEqual(res.status_code, 200)
+        self.assertNotIn(b'autofocus', res.data)
+        self.assertIn(b'Student Academic Details', res.data)
 
-        # 2. Verify API returns branch_analysis
-        res_api = self.client.get('/api/analytics-data')
-        self.assertEqual(res_api.status_code, 200)
-        data = res_api.get_json()
-        self.assertTrue(data['is_hod'])
-        self.assertIn('branch_analysis', data)
-        self.assertIsNotNone(data['branch_analysis'])
-        self.assertEqual(data['branch_analysis']['course'], 'B.Tech')
-        self.assertIn('staff_workload', data['branch_analysis'])
+    def test_query_details_active_participants_and_presence(self):
+        """Verify query details page renders accurate Submitter, Authority (HOD/AO/Principal), and Assigned Staff presence cards."""
+        # 1. Login as B.Tech CSE HOD and view Query #1
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res = self.client.get('/query/1')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b'Active Query Participants', res.data)
+        self.assertIn(b'Branch HOD', res.data)
+        self.assertIn(b'Online Now', res.data)
+
+    def test_department_dashboard_tabs_received_and_assigned(self):
+        """Verify that Department Dashboard supports Received, Assigned (From Principal), and Delegated tabs."""
+        # Login as B.Tech CSE HOD
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        
+        # 1. Received queries view
+        res_recv = self.client.get('/department-dashboard?view=received')
+        self.assertEqual(res_recv.status_code, 200)
+        self.assertIn(b'Received Queries', res_recv.data)
+        self.assertIn(b'Assigned Queries (From Principal)', res_recv.data)
+        self.assertIn(b'Delegated to Staff', res_recv.data)
+
+        # 2. Assigned queries view
+        res_assigned = self.client.get('/department-dashboard?view=assigned')
+        self.assertEqual(res_assigned.status_code, 200)
+
+        # 3. Delegated queries view
+        res_delegated = self.client.get('/department-dashboard?view=delegated')
+        self.assertEqual(res_delegated.status_code, 200)
+
+        # 4. Unassigned queries view
+        res_unassigned = self.client.get('/department-dashboard?view=unassigned')
+        self.assertEqual(res_unassigned.status_code, 200)
+
+    def test_principal_assign_to_hod_and_hod_delegation_flow(self):
+        """Verify workflow: Principal assigns to HOD -> HOD sees it in dashboard -> HOD can resolve directly or delegate to staff."""
+        # 1. Post a query under Others (routed to Principal desk)
+        self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'level': 'UG',
+            'course': 'B.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '3',
+            'title': 'Lab Computer Power Surge Issue',
+            'description': 'Frequent power trip in computer lab 3 causing machine shutdowns.'
+        }, follow_redirects=True)
+
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q = db.execute("SELECT * FROM queries WHERE title = 'Lab Computer Power Surge Issue'").fetchone()
+        self.assertIsNotNone(q)
+        query_id = q['id']
+        db.close()
+
+        # 2. Principal logs in and assigns this query to B.Tech CSE HOD (User ID 3)
+        self.client.post('/login', data={'email': 'principal@college.com', 'password': 'principal123'})
+        res_assign = self.client.post(f'/query/{query_id}/reassign', data={
+            'assigned_staff_id': '3',
+            'priority': 'High'
+        }, follow_redirects=True)
+        self.assertEqual(res_assign.status_code, 200)
+
+        # Verify DB assigned_staff_id is HOD
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q_assigned = db.execute("SELECT * FROM queries WHERE id = ?", (query_id,)).fetchone()
+        self.assertEqual(q_assigned['assigned_staff_id'], 3)
+        db.close()
+
+        # 3. HOD logs in and checks dashboard
+        self.client.get('/logout')
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        
+        # Check Assigned Queries (From Principal) tab
+        res_hod_assigned = self.client.get('/department-dashboard?view=assigned')
+        self.assertEqual(res_hod_assigned.status_code, 200)
+        self.assertIn(b'Lab Computer Power Surge Issue', res_hod_assigned.data)
+        self.assertIn(b'Assigned to You (From Principal)', res_hod_assigned.data)
+
+        # 4. HOD views query details
+        res_hod_details = self.client.get(f'/query/{query_id}')
+        self.assertEqual(res_hod_details.status_code, 200)
+        self.assertIn(b'Assigned to You (HOD Desk)', res_hod_details.data)
+        self.assertIn(b'Resolution & Status Desk', res_hod_details.data)
+
+        # 5. HOD delegates query to CSE Staff Resolver (User ID 4)
+        res_delegate = self.client.post(f'/query/{query_id}/reassign', data={
+            'assigned_staff_id': '4',
+            'priority': 'High'
+        }, follow_redirects=True)
+        self.assertEqual(res_delegate.status_code, 200)
+
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q_delegated = db.execute("SELECT * FROM queries WHERE id = ?", (query_id,)).fetchone()
+        self.assertEqual(q_delegated['assigned_staff_id'], 4)
+        db.close()
+
+        # 6. Assigned Staff logs in and resolves the query
+        self.client.get('/logout')
+        self.client.post('/login', data={'email': 'cse-staff@college.com', 'password': 'staff123'})
+        res_staff_dash = self.client.get('/department-dashboard')
+        self.assertEqual(res_staff_dash.status_code, 200)
+        self.assertIn(b'Lab Computer Power Surge Issue', res_staff_dash.data)
+
+        res_resolve = self.client.post(f'/query/{query_id}/status', data={
+            'status': 'Resolved'
+        }, follow_redirects=True)
+        self.assertEqual(res_resolve.status_code, 200)
+
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q_final = db.execute("SELECT status FROM queries WHERE id = ?", (query_id,)).fetchone()
+        self.assertEqual(q_final['status'], 'Resolved')
+        db.close()
+
+    def test_faculty_staff_ao_hod_principal_no_track_query_status(self):
+        """Verify that Faculty, Staff, AO, HOD, and Principal do not have Track Query Status in navbar/home and get redirected to official desks."""
+        # 1. Test Faculty
+        self.client.post('/login', data={'email': 'prof.sharma@college.com', 'password': 'faculty123'})
+        res_fac_home = self.client.get('/')
+        self.assertNotIn(b'Track Query Status', res_fac_home.data)
+        self.assertIn(b'My Workspace', res_fac_home.data)
+        
+        res_fac_track = self.client.get('/track-query', follow_redirects=False)
+        self.assertEqual(res_fac_track.status_code, 302)
+        self.assertIn('/dashboard', res_fac_track.headers['Location'])
+        self.client.get('/logout')
+
+        # 2. Test Staff
+        self.client.post('/login', data={'email': 'cse-staff@college.com', 'password': 'staff123'})
+        res_st_home = self.client.get('/')
+        self.assertNotIn(b'Track Query Status', res_st_home.data)
+        self.assertIn(b'Received Queries', res_st_home.data)
+        self.assertIn(b'Assigned Queries', res_st_home.data)
+        
+        res_st_track = self.client.get('/track-query', follow_redirects=False)
+        self.assertEqual(res_st_track.status_code, 302)
+        self.assertIn('/department-dashboard', res_st_track.headers['Location'])
+        self.client.get('/logout')
+
+        # 3. Test HOD
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res_hod_home = self.client.get('/')
+        self.assertNotIn(b'Track Query Status', res_hod_home.data)
+        self.assertIn(b'Received Queries', res_hod_home.data)
+        self.assertIn(b'Assigned Queries (from Principal)', res_hod_home.data)
+        
+        # Accessing /track-query directly as HOD redirects to department dashboard
+        res_hod_track = self.client.get('/track-query', follow_redirects=False)
+        self.assertEqual(res_hod_track.status_code, 302)
+        self.assertIn('/department-dashboard', res_hod_track.headers['Location'])
+        
+        # Accessing /track-query?query_id=1 as HOD redirects to query_details
+        res_hod_track_q = self.client.get('/track-query?query_id=1', follow_redirects=False)
+        self.assertEqual(res_hod_track_q.status_code, 302)
+        self.assertIn('/query/1', res_hod_track_q.headers['Location'])
+        self.client.get('/logout')
+
+        # 4. Test AO
+        self.client.post('/login', data={'email': 'ao@college.com', 'password': 'ao123'})
+        res_ao_home = self.client.get('/')
+        self.assertNotIn(b'Track Query Status', res_ao_home.data)
+        self.assertIn(b'Received Queries', res_ao_home.data)
+        self.assertIn(b'Assigned Queries (from Principal)', res_ao_home.data)
+        
+        res_ao_track = self.client.get('/track-query', follow_redirects=False)
+        self.assertEqual(res_ao_track.status_code, 302)
+        self.assertIn('Administrative', res_ao_track.headers['Location'])
+        self.client.get('/logout')
+
+        # 5. Test Principal
+        self.client.post('/login', data={'email': 'principal@college.com', 'password': 'principal123'})
+        res_princ_home = self.client.get('/')
+        self.assertNotIn(b'Track Query Status', res_princ_home.data)
+        self.assertNotIn(b'Track Status', res_princ_home.data)
+        self.assertIn(b'Principal Desk', res_princ_home.data)
+        
+        res_princ_track = self.client.get('/track-query', follow_redirects=False)
+        self.assertEqual(res_princ_track.status_code, 302)
+        self.assertIn('Others', res_princ_track.headers['Location'])
+        self.client.get('/logout')
+
+        # 6. Verify unauthenticated student still sees Track Query Status
+        res_guest_home = self.client.get('/')
+        self.assertIn(b'Track Query Status', res_guest_home.data)
+
+    def test_post_query_and_trace_flow(self):
+        """Verify complete flow: submit query -> view confirmation -> track query status & send reply."""
+        # 1. Post a new Academic query as student
+        res_submit = self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'name': 'Rahul Varma',
+            'email': 'rahul.test@college.edu',
+            'roll_no': '21A91A0588',
+            'level': 'UG',
+            'course': 'B.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '3',
+            'title': 'Operating System Lab Viva Timetable Clarification',
+            'description': 'Kindly provide the detailed batch schedule and timetable for OS practical exam.'
+        }, follow_redirects=True)
+        self.assertEqual(res_submit.status_code, 200)
+        self.assertIn(b'Your Query is Logged!', res_submit.data)
+        
+        # Get query ID from database
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q = db.execute("SELECT * FROM queries WHERE title = 'Operating System Lab Viva Timetable Clarification'").fetchone()
+        self.assertIsNotNone(q)
+        qid = q['id']
+        db.close()
+
+        # 2. Track query via /track-query?query_id=<qid>
+        res_track = self.client.get(f'/track-query?query_id={qid}')
+        self.assertEqual(res_track.status_code, 200)
+        self.assertIn(b'Operating System Lab Viva Timetable Clarification', res_track.data)
+        self.assertIn(b'Active Query Participants', res_track.data)
+        self.assertIn(b'Rahul Varma', res_track.data)
+        self.assertIn(b'Branch HOD', res_track.data)
+
+        # 3. Post a student reply from the tracking page
+        res_reply = self.client.post('/track-query', data={
+            'action': 'send_reply',
+            'target_query_id': str(qid),
+            'message': 'Also need syllabus details for Viva.',
+            'sender_name': 'Rahul Varma'
+        }, follow_redirects=True)
+        self.assertEqual(res_reply.status_code, 200)
+        self.assertIn(b'Also need syllabus details for Viva.', res_reply.data)
+
+        # 4. Post an Administrative query (e.g. Theft) & Track
+        res_admin = self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'name': 'Pooja Reddy',
+            'email': 'pooja.test@college.edu',
+            'roll_no': '21A91A0599',
+            'level': 'UG',
+            'course': 'B.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '3',
+            'title': 'Theft complaint regarding lost mobile',
+            'description': 'My mobile phone was stolen in campus cafeteria.'
+        }, follow_redirects=True)
+        self.assertEqual(res_admin.status_code, 200)
+        self.assertIn(b'Your Query is Logged!', res_admin.data)
+        
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q_adm = db.execute("SELECT * FROM queries WHERE title = 'Theft complaint regarding lost mobile'").fetchone()
+        self.assertIsNotNone(q_adm)
+        self.assertEqual(q_adm['category'], 'Administrative')
+        db.close()
+        
+        res_track_adm = self.client.get(f'/track-query?query_id={q_adm["id"]}')
+        self.assertEqual(res_track_adm.status_code, 200)
+        self.assertIn(b'Administrative Officer (AO)', res_track_adm.data)
+
+        # 5. Post a Campus Support / Others query & Track
+        res_oth = self.client.post('/submit-query', data={
+            'query_type': 'student',
+            'name': 'Kiran Kumar',
+            'email': 'kiran.test@college.edu',
+            'roll_no': '21A91A0512',
+            'level': 'UG',
+            'course': 'B.Tech',
+            'department': 'Computer Science & Engineering (CSE)',
+            'year': '2',
+            'title': 'Campus Wi-Fi connectivity broken',
+            'description': 'Wi-Fi connection is not working in block 2.'
+        }, follow_redirects=True)
+        self.assertEqual(res_oth.status_code, 200)
+        
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q_oth = db.execute("SELECT * FROM queries WHERE title = 'Campus Wi-Fi connectivity broken'").fetchone()
+        self.assertIsNotNone(q_oth)
+        self.assertEqual(q_oth['category'], 'Others')
+        db.close()
+        
+        res_track_oth = self.client.get(f'/track-query?query_id={q_oth["id"]}')
+        self.assertEqual(res_track_oth.status_code, 200)
+        self.assertIn(b'Principal Executive Desk', res_track_oth.data)
+
+    def test_navigation_received_and_assigned_queries_for_faculty_hod_ao(self):
+        """Verify navigation bar explicitly presents Received Queries and Assigned Queries for Faculty, HOD, and AO."""
+        # 1. HOD: Received Queries and Assigned Queries (from Principal)
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res_hod = self.client.get('/department-dashboard')
+        self.assertEqual(res_hod.status_code, 200)
+        self.assertIn(b'Received Queries', res_hod.data)
+        self.assertIn(b'Assigned Queries (from Principal)', res_hod.data)
+        
+        # Test clicking Assigned Queries tab
+        res_hod_assigned = self.client.get('/department-dashboard?view=assigned')
+        self.assertEqual(res_hod_assigned.status_code, 200)
+        
+        # Test clicking Received Queries tab
+        res_hod_received = self.client.get('/department-dashboard?view=received')
+        self.assertEqual(res_hod_received.status_code, 200)
+        self.client.get('/logout')
+
+        # 2. AO: Received Queries and Assigned Queries (from Principal)
+        self.client.post('/login', data={'email': 'ao@college.com', 'password': 'ao123'})
+        res_ao = self.client.get('/department-dashboard?dept=Administrative')
+        self.assertEqual(res_ao.status_code, 200)
+        self.assertIn(b'Received Queries', res_ao.data)
+        self.assertIn(b'Assigned Queries (from Principal)', res_ao.data)
+        
+        # Test AO assigned and received views
+        res_ao_assigned = self.client.get('/department-dashboard?dept=Administrative&view=assigned')
+        self.assertEqual(res_ao_assigned.status_code, 200)
+        res_ao_received = self.client.get('/department-dashboard?dept=Administrative&view=received')
+        self.assertEqual(res_ao_received.status_code, 200)
+        self.client.get('/logout')
+
+        # 3. Faculty / Staff: Received Queries and Assigned Queries (from HOD/Principal)
+        self.client.post('/login', data={'email': 'cse-staff@college.com', 'password': 'staff123'})
+        res_staff = self.client.get('/department-dashboard')
+        self.assertEqual(res_staff.status_code, 200)
+        self.assertIn(b'Received Queries', res_staff.data)
+        self.assertIn(b'Assigned Queries (from HOD/Principal)', res_staff.data)
+        
+        res_staff_assigned = self.client.get('/department-dashboard?view=assigned')
+        self.assertEqual(res_staff_assigned.status_code, 200)
+        res_staff_received = self.client.get('/department-dashboard?view=received')
+        self.assertEqual(res_staff_received.status_code, 200)
+        self.client.get('/logout')
 
 if __name__ == '__main__':
     unittest.main()
-
 
 

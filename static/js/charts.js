@@ -12,6 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
         initBranchPillar(data.branch_analysis);
       }
 
+      // If logged in as HOD, strictly keep to branch analytics only
+      if (data.is_hod) {
+        return;
+      }
+
       // 2. Principal Desk Analysis
       if (data.principal_analysis) {
         initPrincipalPillar(data.principal_analysis);
@@ -234,12 +239,14 @@ function initPrincipalPillar(pData) {
 
   // Tab KPI Tiles
   setText('pSummaryTotal', sum.total ?? 0);
+  setText('pSummaryAssigned', sum.assigned ?? 0);
   setText('pSummarySolved', sum.solved ?? 0);
   setText('pSummarySolvedRate', `${sum.solved_percent ?? 0}% Resolution Rate`);
   setText('pSummaryPending', sum.pending ?? 0);
   setText('pSummaryUrgent', sum.urgent ?? 0);
+  setText('pSummaryUnassigned', sum.unassigned ?? 0);
 
-  // Topics Chart (Wi-Fi, Food, Cleanliness, Maintenance)
+  // 1. Topics Chart (Wi-Fi, Food, Cleanliness, Maintenance)
   const topicCtx = document.getElementById('pTopicChart');
   if (topicCtx && pData.topics && pData.topics.labels.length) {
     const topicColors = ['#4f46e5', '#0284c7', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#64748b'];
@@ -265,7 +272,59 @@ function initPrincipalPillar(pData) {
     });
   }
 
-  // Status Chart
+  // 2. Student Year of Study Pie Chart
+  const yrCtx = document.getElementById('pYearChart');
+  if (yrCtx && pData.years && pData.years.labels.length) {
+    const yrColors = ['#0284c7', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+    new Chart(yrCtx, {
+      type: 'pie',
+      data: {
+        labels: pData.years.labels,
+        datasets: [{
+          data: pData.years.data,
+          backgroundColor: yrColors.slice(0, pData.years.labels.length),
+          borderWidth: 2,
+          borderColor: '#ffffff',
+          hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 10, weight: 'bold' }, padding: 8 } }
+        }
+      }
+    });
+  }
+
+  // 3. Origin Department / Branch Chart
+  const deptCtx = document.getElementById('pDeptChart');
+  if (deptCtx && pData.departments && pData.departments.labels.length) {
+    const deptColors = ['#10b981', '#4f46e5', '#0284c7', '#f59e0b', '#ec4899', '#8b5cf6', '#64748b'];
+    new Chart(deptCtx, {
+      type: 'doughnut',
+      data: {
+        labels: pData.departments.labels,
+        datasets: [{
+          data: pData.departments.data,
+          backgroundColor: deptColors.slice(0, pData.departments.labels.length),
+          borderWidth: 2,
+          borderColor: '#ffffff',
+          hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 10, weight: 'bold' }, padding: 8 } }
+        }
+      }
+    });
+  }
+
+  // 4. Status Lifecycle Chart
   const stCtx = document.getElementById('pStatusChart');
   if (stCtx && pData.statuses && pData.statuses.labels.length) {
     new Chart(stCtx, {
@@ -289,7 +348,7 @@ function initPrincipalPillar(pData) {
     });
   }
 
-  // Priority Chart
+  // 5. Priority & Urgency Levels Chart
   const prCtx = document.getElementById('pPriorityChart');
   if (prCtx && pData.priorities && pData.priorities.labels.length) {
     const colorMap = { 'Critical': '#dc2626', 'High': '#ea580c', 'Medium': '#f59e0b', 'Low': '#64748b' };
@@ -400,6 +459,60 @@ function initAoPillar(aoData) {
       }
     });
   }
+
+  // Populate AO Staff Workload Report Table
+  if (aoData.staff_workload) {
+    populateAoStaffTable(aoData.staff_workload);
+  }
+}
+
+function populateAoStaffTable(staffList) {
+  const tbody = document.getElementById('aoStaffTableBody');
+  if (!tbody) return;
+
+  if (!staffList || !staffList.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; padding: 2rem; color: #64748b;">
+          ℹ️ No administrative staff resolvers found.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = '';
+  staffList.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #f1f5f9';
+    tr.innerHTML = `
+      <td style="padding: 0.85rem 1rem;">
+        <strong style="color: #0f172a; display: block;">🏢 ${s.name}</strong>
+        <span style="font-size: 0.75rem; color: #64748b;">${s.designation}</span>
+      </td>
+      <td style="padding: 0.85rem 1rem; color: #475569; font-size: 0.82rem;">
+        ${s.email}
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 700;">
+        <span class="badge" style="background: #e0f2fe; color: #0369a1; font-size: 0.82rem;">${s.assigned}</span>
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 700; color: #059669;">
+        ${s.resolved}
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 700; color: #b45309;">
+        ${s.pending}
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: center; font-weight: 800; color: ${s.solved_percent >= 70 ? '#059669' : (s.solved_percent >= 40 ? '#b45309' : '#be185d')};">
+        ${s.solved_percent}%
+      </td>
+      <td style="padding: 0.85rem 1rem; text-align: right;">
+        <a href="/department-dashboard?dept=Administrative" class="btn btn-secondary btn-sm" style="font-size: 0.78rem; font-weight: 700; padding: 4px 10px;">
+          Assign Queries →
+        </a>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 /* -------------------------------------------------------------

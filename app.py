@@ -27,6 +27,24 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+ONLINE_USERS = {} # user_id -> set of socket session IDs
+
+@app.before_request
+def track_user_activity():
+    """Updates user last_active_at and tracks online presence on every HTTP request."""
+    user = get_current_user()
+    if user and user.get('id'):
+        uid = user['id']
+        if uid not in ONLINE_USERS:
+            ONLINE_USERS[uid] = set()
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            db = get_db()
+            db.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now_str, uid))
+            db.commit()
+        except Exception:
+            pass
+
 # -------------------------------------------------------------
 # HELPERS & DECORATORS
 # -------------------------------------------------------------
@@ -271,8 +289,10 @@ def login():
     if 'user_id' in session:
         user = get_current_user()
         if user:
-            if user['role'] in ['admin', 'principal']:
+            if user['role'] == 'admin':
                 return redirect(url_for('admin_dashboard'))
+            elif user['role'] == 'principal':
+                return redirect(url_for('department_dashboard', dept='Others', view='received'))
             elif user['role'] in ['staff', 'hod', 'ao', 'faculty']:
                 return redirect(url_for('department_dashboard'))
             else:
@@ -306,8 +326,10 @@ def login():
             flash(f'Welcome back, {user["name"]}!', 'success')
             
             # Redirect to relevant dashboard
-            if user['role'] in ['admin', 'principal']:
+            if user['role'] == 'admin':
                 return redirect(url_for('admin_dashboard'))
+            elif user['role'] == 'principal':
+                return redirect(url_for('department_dashboard', dept='Others', view='received'))
             elif user['role'] == 'ao':
                 return redirect(url_for('department_dashboard', dept='Administrative'))
             elif user['role'] in ['staff', 'office_staff', 'hod', 'faculty']:
@@ -426,6 +448,10 @@ def dashboard():
     user = get_current_user()
     if user['role'] in ['staff', 'office_staff', 'hod']:
         return redirect(url_for('department_dashboard'))
+    elif user['role'] == 'ao':
+        return redirect(url_for('department_dashboard', dept='Administrative'))
+    elif user['role'] == 'principal':
+        return redirect(url_for('department_dashboard', dept='Others', view='received'))
     elif user['role'] == 'admin':
         return redirect(url_for('admin_dashboard'))
         
@@ -556,10 +582,9 @@ def submit_query():
         # Determine submitter user record
         if user:
             submitter_id = user['id']
-            if department_input:
-                cursor.execute("""
-                    UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = ? WHERE id = ?
-                """, (level, course, year_val, department_input, submitter_id))
+            cursor.execute("""
+                UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = COALESCE(?, department), last_active_at = ? WHERE id = ?
+            """, (level, course, year_val, department_input, now_str, submitter_id))
         else:
             # Direct anonymous or email-backed submission
             existing_user = None
@@ -569,17 +594,20 @@ def submit_query():
             if existing_user:
                 submitter_id = existing_user['id']
                 cursor.execute("""
-                    UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = ? WHERE id = ?
-                """, (level, course, year_val, department_input or department, submitter_id))
+                    UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = COALESCE(?, department), last_active_at = ? WHERE id = ?
+                """, (level, course, year_val, department_input or department, now_str, submitter_id))
             else:
                 submitter_name = name_input if name_input else ('Faculty Member' if is_faculty_query else 'Student')
                 submitter_email = email_input if email_input else f"{'faculty' if is_faculty_query else 'student'}_{int(datetime.now().timestamp())}_{random.randint(1000, 9999)}@college.edu"
                 temp_pass = generate_password_hash('portal123')
                 cursor.execute("""
-                    INSERT INTO users (name, email, password_hash, role, level, course, year, department, roll_no, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                """, (submitter_name, submitter_email, temp_pass, submitter_role, level, course, year_val, department_input or department, roll_no_input))
+                    INSERT INTO users (name, email, password_hash, role, level, course, year, department, roll_no, is_active, last_active_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """, (submitter_name, submitter_email, temp_pass, submitter_role, level, course, year_val, department_input or department, roll_no_input, now_str))
                 submitter_id = cursor.lastrowid
+                
+        if submitter_id not in ONLINE_USERS:
+            ONLINE_USERS[submitter_id] = set()
                 
         try:
             cursor.execute("""
@@ -703,13 +731,38 @@ def query_submitted(query_id):
 @app.route('/track-query', methods=['GET', 'POST'])
 def track_query():
     """Direct Query Tracking & Live Two-Way Chat without requiring student password login."""
-    db = get_db()
     query_id_input = request.args.get('query_id') or request.form.get('query_id')
+
+    # Executive & Faculty/Staff roles manage queries from their official desks and dashboards
+    logged_in_user = get_current_user()
+    if logged_in_user and logged_in_user.get('role') != 'student':
+        if query_id_input:
+            clean_id = ''.join(c for c in str(query_id_input) if c.isdigit())
+            if clean_id:
+                return redirect(url_for('query_details', query_id=int(clean_id)))
+        user_role = logged_in_user.get('role')
+        if user_role == 'hod':
+            return redirect(url_for('department_dashboard'))
+        elif user_role == 'ao':
+            return redirect(url_for('department_dashboard', dept='Administrative'))
+        elif user_role == 'principal':
+            return redirect(url_for('department_dashboard', dept='Others'))
+        elif user_role == 'admin':
+            return redirect(url_for('admin_dashboard'))
+        elif user_role in ['staff', 'office_staff']:
+            return redirect(url_for('department_dashboard'))
+        elif user_role == 'faculty':
+            return redirect(url_for('dashboard'))
+
+    db = get_db()
     query = None
     messages = []
     attachments = []
     staff_resolver = None
     hod_resolver = None
+    submitter_presence = None
+    authority_presence = None
+    staff_presence = None
     
     # Handle direct reply from tracking page
     if request.method == 'POST' and request.form.get('action') == 'send_reply':
@@ -787,18 +840,132 @@ def track_query():
                 """, (query['id'],)).fetchall()
                 
                 if query['assigned_staff_id']:
-                    staff_resolver = db.execute("SELECT id, name, email, department, designation, phone FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
+                    staff_resolver = db.execute("SELECT id, name, email, department, designation, phone, role, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
                 
                 query_course = query['course'] if ('course' in query.keys() and query['course']) else None
                 if query_course:
                     hod_resolver = db.execute("""
-                        SELECT id, name, email, department, designation 
+                        SELECT id, name, email, department, designation, role, last_active_at 
                         FROM users 
                         WHERE role = 'hod' AND department = ? AND (course = ? OR course IS NULL)
                         ORDER BY (CASE WHEN course = ? THEN 1 ELSE 2 END) LIMIT 1
                     """, (query['department'], query_course, query_course)).fetchone()
                 else:
-                    hod_resolver = db.execute("SELECT id, name, email, department, designation FROM users WHERE role = 'hod' AND department = ? LIMIT 1", (query['department'],)).fetchone()
+                    hod_resolver = db.execute("SELECT id, name, email, department, designation, role, last_active_at FROM users WHERE role = 'hod' AND department = ? LIMIT 1", (query['department'],)).fetchone()
+                
+                # Update submitter active status & mark online
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                sub_id = query['user_id']
+                try:
+                    db.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now_str, sub_id))
+                    db.commit()
+                except Exception:
+                    pass
+                if sub_id not in ONLINE_USERS:
+                    ONLINE_USERS[sub_id] = set()
+                    
+                # 1. Submitter Presence
+                sub_row = db.execute("SELECT id, name, role, department, course, level, year, roll_no, last_active_at FROM users WHERE id = ?", (sub_id,)).fetchone()
+                sub_role_display = 'Student'
+                if sub_row:
+                    if sub_row['role'] == 'student':
+                        c_info = f"{sub_row['course'] or query['course'] or 'UG'} {sub_row['department'] or query['department'] or ''}".strip()
+                        y_info = f" - Yr {sub_row['year'] or query['year']}" if (sub_row['year'] or query['year']) else ""
+                        sub_role_display = f"Student ({c_info}{y_info})"
+                    elif sub_row['role'] in ['faculty', 'staff']:
+                        sub_role_display = f"Faculty ({sub_row['department'] or query['department'] or ''})"
+                    else:
+                        sub_role_display = sub_row['role'].capitalize()
+                        
+                submitter_presence = {
+                    'id': sub_row['id'] if sub_row else sub_id,
+                    'name': sub_row['name'] if sub_row else 'Student Submitter',
+                    'role': sub_role_display,
+                    'is_student': (sub_row['role'] == 'student') if sub_row else True,
+                    'is_faculty': (sub_row['role'] in ['faculty', 'staff']) if sub_row else False,
+                    'department': sub_row['department'] if (sub_row and sub_row['department']) else query['department'],
+                    'course': sub_row['course'] if (sub_row and sub_row['course']) else (query['course'] if 'course' in query.keys() else None),
+                    'year': sub_row['year'] if (sub_row and sub_row['year']) else (query['year'] if 'year' in query.keys() else None),
+                    'roll_no': sub_row['roll_no'] if (sub_row and sub_row['roll_no']) else (query['roll_no'] if 'roll_no' in query.keys() else None),
+                    'is_online': True,
+                    'last_active': 'Just now'
+                }
+
+                # 2. Governing Authority Presence (Academics -> HOD, Administrative -> AO, Others -> Principal)
+                authority_presence = None
+                q_cat = query['category']
+                if q_cat == 'Administrative':
+                    ao_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'ao' ORDER BY id LIMIT 1").fetchone()
+                    if ao_row:
+                        ao_online = ao_row['id'] in ONLINE_USERS
+                        authority_presence = {
+                            'id': ao_row['id'],
+                            'name': ao_row['name'],
+                            'email': ao_row['email'],
+                            'role_type': 'ao',
+                            'role_title': 'Administrative Officer (AO)',
+                            'icon': '🏢',
+                            'department': 'Administrative Wing',
+                            'designation': ao_row['designation'] or 'Administrative Officer',
+                            'is_online': ao_online,
+                            'last_active': 'Just now' if ao_online else ao_row['last_active_at']
+                        }
+                elif q_cat == 'Others':
+                    prin_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'principal' ORDER BY id LIMIT 1").fetchone()
+                    if prin_row:
+                        prin_online = prin_row['id'] in ONLINE_USERS
+                        authority_presence = {
+                            'id': prin_row['id'],
+                            'name': prin_row['name'],
+                            'email': prin_row['email'],
+                            'role_type': 'principal',
+                            'role_title': 'Principal Executive Desk',
+                            'icon': '🏛️',
+                            'department': 'College Leadership',
+                            'designation': prin_row['designation'] or 'Principal',
+                            'is_online': prin_online,
+                            'last_active': 'Just now' if prin_online else prin_row['last_active_at']
+                        }
+                else: # Academics
+                    if hod_resolver:
+                        hod_online = hod_resolver['id'] in ONLINE_USERS
+                        authority_presence = {
+                            'id': hod_resolver['id'],
+                            'name': hod_resolver['name'],
+                            'email': hod_resolver['email'],
+                            'role_type': 'hod',
+                            'role_title': f"{query_course or ''} Branch HOD".strip(),
+                            'icon': '🎓',
+                            'department': hod_resolver['department'] or query['department'],
+                            'designation': hod_resolver['designation'] or 'Head of Department',
+                            'is_online': hod_online,
+                            'last_active': 'Just now' if hod_online else hod_resolver['last_active_at']
+                        }
+
+                # 3. Staff Resolver Presence
+                staff_presence = None
+                if staff_resolver:
+                    staff_online = staff_resolver['id'] in ONLINE_USERS
+                    if staff_resolver['role'] == 'hod':
+                        role_label = 'Assigned Head of Dept (HOD)'
+                        desig_label = staff_resolver['designation'] or 'Head of Department'
+                    elif staff_resolver['role'] == 'office_staff':
+                        role_label = 'Office Staff Resolver'
+                        desig_label = staff_resolver['designation'] or 'Office Staff'
+                    else:
+                        role_label = 'Assigned Staff Resolver'
+                        desig_label = staff_resolver['designation'] or 'Department Staff'
+
+                    staff_presence = {
+                        'id': staff_resolver['id'],
+                        'name': staff_resolver['name'],
+                        'role': role_label,
+                        'role_type': staff_resolver['role'],
+                        'department': staff_resolver['department'] or query['department'],
+                        'designation': desig_label,
+                        'is_online': staff_online,
+                        'last_active': 'Just now' if staff_online else staff_resolver['last_active_at']
+                    }
             else:
                 flash(f'No query found with ID #{query_id_input}. Please verify your Query ID and try again.', 'warning')
                 
@@ -809,6 +976,9 @@ def track_query():
         attachments=attachments,
         staff_resolver=staff_resolver,
         hod_resolver=hod_resolver,
+        submitter_presence=submitter_presence if query else None,
+        authority_presence=authority_presence if query else None,
+        staff_presence=staff_presence if query else None,
         query_id_input=query_id_input
     )
 
@@ -912,38 +1082,96 @@ def query_details(query_id):
         ORDER BY a.created_at DESC
     """, (query_id,)).fetchall()
     
-    # Calculate Live Presence & Online Status for all 3 key parties: Submitter, Assigned Staff, Branch HOD
+    # Calculate Live Presence & Online Status for all 3 key parties: Submitter, Governing Authority (HOD/AO/Principal), and Assigned Staff
     # 1. Submitter Presence
-    sub_row = db.execute("SELECT id, name, role, department, course, level, last_active_at FROM users WHERE id = ?", (query['user_id'],)).fetchone()
+    sub_row = db.execute("SELECT id, name, role, department, course, level, year, roll_no, last_active_at FROM users WHERE id = ?", (query['user_id'],)).fetchone()
+    
+    sub_is_online = False
+    if sub_row:
+        if (sub_row['id'] in ONLINE_USERS) or (user and user['id'] == sub_row['id']):
+            sub_is_online = True
+        elif sub_row['last_active_at']:
+            try:
+                sub_dt = datetime.strptime(sub_row['last_active_at'].split('.')[0], '%Y-%m-%d %H:%M:%S')
+                if (datetime.now() - sub_dt).total_seconds() < 900:
+                    sub_is_online = True
+            except Exception:
+                pass
+                
+    try:
+        q_dt = datetime.strptime(query['created_at'].split('.')[0], '%Y-%m-%d %H:%M:%S')
+        if (datetime.now() - q_dt).total_seconds() < 900:
+            sub_is_online = True
+    except Exception:
+        pass
+
+    sub_role_display = 'Student'
+    if sub_row:
+        if sub_row['role'] == 'student':
+            c_info = f"{sub_row['course'] or query['course'] or 'UG'} {sub_row['department'] or query['department'] or ''}".strip()
+            y_info = f" - Yr {sub_row['year'] or query['year']}" if (sub_row['year'] or query['year']) else ""
+            sub_role_display = f"Student ({c_info}{y_info})"
+        elif sub_row['role'] in ['faculty', 'staff']:
+            sub_role_display = f"Faculty ({sub_row['department'] or query['department'] or ''})"
+        else:
+            sub_role_display = sub_row['role'].capitalize()
+            
     submitter_presence = {
         'id': sub_row['id'] if sub_row else query['user_id'],
-        'name': sub_row['name'] if sub_row else 'Submitter',
-        'role': sub_row['role'].capitalize() if sub_row else 'Student',
-        'is_online': (sub_row['id'] in ONLINE_USERS) if sub_row else False,
-        'last_active': sub_row['last_active_at'] if sub_row else None
+        'name': sub_row['name'] if sub_row else 'Student Submitter',
+        'role': sub_role_display,
+        'is_student': (sub_row['role'] == 'student') if sub_row else True,
+        'is_faculty': (sub_row['role'] in ['faculty', 'staff']) if sub_row else False,
+        'department': sub_row['department'] if (sub_row and sub_row['department']) else query['department'],
+        'course': sub_row['course'] if (sub_row and sub_row['course']) else (query['course'] if 'course' in query.keys() else None),
+        'year': sub_row['year'] if (sub_row and sub_row['year']) else (query['year'] if 'year' in query.keys() else None),
+        'roll_no': sub_row['roll_no'] if (sub_row and sub_row['roll_no']) else (query['roll_no'] if 'roll_no' in query.keys() else None),
+        'is_online': sub_is_online,
+        'last_active': 'Just now' if sub_is_online else (sub_row['last_active_at'] if sub_row else query['created_at'])
     }
 
-    # 2. Assigned Staff Presence
-    staff_presence = None
-    if query['assigned_staff_id']:
-        staff_row = db.execute("SELECT id, name, role, department, designation, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
-        if staff_row:
-            staff_presence = {
-                'id': staff_row['id'],
-                'name': staff_row['name'],
-                'role': 'Assigned Resolver',
-                'department': staff_row['department'] or query['department'],
-                'designation': staff_row['designation'] or 'Department Staff',
-                'is_online': (staff_row['id'] in ONLINE_USERS),
-                'last_active': staff_row['last_active_at']
+    # 2. Governing Authority Presence (Academics -> Branch HOD, Administrative -> AO, Others -> Principal)
+    authority_presence = None
+    q_cat = query['category']
+    
+    if q_cat == 'Administrative':
+        ao_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'ao' ORDER BY id LIMIT 1").fetchone()
+        if ao_row:
+            ao_online = (ao_row['id'] in ONLINE_USERS) or (user and user['id'] == ao_row['id'])
+            authority_presence = {
+                'id': ao_row['id'],
+                'name': ao_row['name'],
+                'email': ao_row['email'],
+                'role_type': 'ao',
+                'role_title': 'Administrative Officer (AO)',
+                'icon': '🏢',
+                'department': 'Administrative Wing',
+                'designation': ao_row['designation'] or 'Administrative Officer',
+                'is_online': ao_online,
+                'last_active': 'Just now' if ao_online else ao_row['last_active_at']
             }
-
-    # 3. Branch HOD Presence & Details (Strictly matching registered HOD for this department and course)
-    hod_row = None
-    target_dept = query['department'] or (sub_row['department'] if sub_row else None)
-    target_course = query['course'] if ('course' in query.keys() and query['course']) else (sub_row['course'] if sub_row and 'course' in sub_row.keys() else None)
-    if target_dept:
-        if target_course:
+    elif q_cat == 'Others':
+        prin_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'principal' ORDER BY id LIMIT 1").fetchone()
+        if prin_row:
+            prin_online = (prin_row['id'] in ONLINE_USERS) or (user and user['id'] == prin_row['id'])
+            authority_presence = {
+                'id': prin_row['id'],
+                'name': prin_row['name'],
+                'email': prin_row['email'],
+                'role_type': 'principal',
+                'role_title': 'Principal Executive Desk',
+                'icon': '🏛️',
+                'department': 'College Leadership',
+                'designation': prin_row['designation'] or 'Principal',
+                'is_online': prin_online,
+                'last_active': 'Just now' if prin_online else prin_row['last_active_at']
+            }
+    else: # Academics
+        hod_row = None
+        target_dept = query['department'] or (sub_row['department'] if sub_row else None)
+        target_course = query['course'] if ('course' in query.keys() and query['course']) else (sub_row['course'] if sub_row and 'course' in sub_row.keys() else None)
+        
+        if target_dept and target_course:
             hod_row = db.execute("""
                 SELECT id, name, email, role, department, designation, last_active_at 
                 FROM users 
@@ -951,16 +1179,14 @@ def query_details(query_id):
                 ORDER BY id DESC LIMIT 1
             """, (target_dept, target_course)).fetchone()
             
-        # Fallback to exact match by department
-        if not hod_row:
+        if not hod_row and target_dept:
             hod_row = db.execute("""
                 SELECT id, name, email, role, department, designation, last_active_at 
                 FROM users 
                 WHERE role = 'hod' AND department = ?
                 ORDER BY id DESC LIMIT 1
             """, (target_dept,)).fetchone()
-        
-        # Match by course if submitter belongs to specific academic course
+            
         if not hod_row and target_course:
             hod_row = db.execute("""
                 SELECT id, name, email, role, department, designation, last_active_at 
@@ -969,7 +1195,6 @@ def query_details(query_id):
                 ORDER BY id DESC LIMIT 1
             """, (target_course,)).fetchone()
             
-        # Fuzzy match on branch name
         if not hod_row and target_dept not in ['Academics', 'Administrative', 'Others']:
             hod_row = db.execute("""
                 SELECT id, name, email, role, department, designation, last_active_at 
@@ -977,19 +1202,71 @@ def query_details(query_id):
                 WHERE role = 'hod' AND (department LIKE ? OR ? LIKE '%' || department || '%')
                 ORDER BY id DESC LIMIT 1
             """, (f"%{target_dept}%", target_dept)).fetchone()
+            
+        if not hod_row:
+            hod_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'hod' ORDER BY id LIMIT 1").fetchone()
+            
+        if hod_row:
+            hod_online = (hod_row['id'] in ONLINE_USERS) or (user and user['id'] == hod_row['id'])
+            authority_presence = {
+                'id': hod_row['id'],
+                'name': hod_row['name'],
+                'email': hod_row['email'],
+                'role_type': 'hod',
+                'role_title': f"{target_course or ''} Branch HOD".strip(),
+                'icon': '🎓',
+                'department': hod_row['department'] or query['department'],
+                'designation': hod_row['designation'] or 'Head of Department',
+                'is_online': hod_online,
+                'last_active': 'Just now' if hod_online else hod_row['last_active_at']
+            }
+            
+    hod_presence = authority_presence
 
-    hod_presence = None
-    if hod_row:
-        hod_presence = {
-            'id': hod_row['id'],
-            'name': hod_row['name'],
-            'email': hod_row['email'],
-            'role': 'Branch HOD',
-            'department': hod_row['department'] or query['department'],
-            'designation': hod_row['designation'] or 'Head of Department',
-            'is_online': (hod_row['id'] in ONLINE_USERS),
-            'last_active': hod_row['last_active_at']
-        }
+    # 3. Assigned Staff / Resolver Presence
+    staff_presence = None
+    if query['assigned_staff_id']:
+        staff_row = db.execute("SELECT id, name, role, department, designation, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
+        if staff_row:
+            staff_online = (staff_row['id'] in ONLINE_USERS) or (user and user['id'] == staff_row['id'])
+            if staff_row['role'] == 'hod':
+                role_label = 'Assigned Head of Dept (HOD)'
+                desig_label = staff_row['designation'] or 'Head of Department'
+            elif staff_row['role'] == 'office_staff':
+                role_label = 'Office Staff Resolver'
+                desig_label = staff_row['designation'] or 'Office Staff'
+            else:
+                role_label = 'Assigned Staff Resolver'
+                desig_label = staff_row['designation'] or 'Department Staff'
+
+            staff_presence = {
+                'id': staff_row['id'],
+                'name': staff_row['name'],
+                'role': role_label,
+                'role_type': staff_row['role'],
+                'department': staff_row['department'] or query['department'],
+                'designation': desig_label,
+                'is_online': staff_online,
+                'last_active': 'Just now' if staff_online else staff_row['last_active_at']
+            }
+
+    # Flag if query is assigned to currently logged-in HOD
+    is_assigned_to_current_hod = bool(user and user['role'] == 'hod' and query['assigned_staff_id'] == user['id'])
+
+    # Complete lists of HODs and Staff Resolvers for Principal & Admin assignment selection
+    all_hods = db.execute("""
+        SELECT id, name, email, role, level, course, department, designation 
+        FROM users 
+        WHERE role = 'hod' AND is_active = 1 
+        ORDER BY level ASC, course ASC, name ASC
+    """).fetchall()
+
+    all_staff = db.execute("""
+        SELECT id, name, email, role, level, course, department, designation 
+        FROM users 
+        WHERE role IN ('staff', 'office_staff', 'faculty') AND is_active = 1 
+        ORDER BY department ASC, name ASC
+    """).fetchall()
 
     return render_template(
         'query_details.html',
@@ -997,11 +1274,19 @@ def query_details(query_id):
         messages=visible_messages,
         attachments=attachments,
         dept_staff=dept_staff,
+        all_hods=all_hods,
+        all_staff=all_staff,
         audit_logs=audit_logs,
         submitter_presence=submitter_presence,
+        authority_presence=authority_presence,
         staff_presence=staff_presence,
-        hod_presence=hod_presence
+        hod_presence=hod_presence,
+        is_assigned_to_current_hod=is_assigned_to_current_hod
     )
+
+
+
+
 
 
 @app.route('/query/<int:query_id>/message', methods=['POST'])
@@ -1217,9 +1502,14 @@ def reassign_query(query_id):
         flash('Query not found.', 'danger')
         return redirect(url_for('dashboard'))
         
+    action_type = request.form.get('action_type', '').strip()
     new_dept = request.form.get('department')
     new_staff_id = request.form.get('assigned_staff_id')
     new_priority = request.form.get('priority')
+    
+    # Quick Action: HOD or Staff takes the query directly
+    if action_type == 'take_query':
+        new_staff_id = str(user['id'])
     
     cursor = db.cursor()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1248,15 +1538,83 @@ def reassign_query(query_id):
         
     if new_staff_id is not None:
         staff_val = int(new_staff_id) if new_staff_id != "" and new_staff_id != "0" else None
+        
+        # Determine status update
+        new_status = 'In Progress' if (action_type == 'take_query' or (staff_val == user['id'] and user['role'] == 'hod')) else ('Assigned' if query['status'] == 'New' else query['status'])
+        
         cursor.execute("""
-            UPDATE queries SET assigned_staff_id = ?, status = CASE WHEN status = 'New' THEN 'Assigned' ELSE status END, updated_at = ? WHERE id = ?
-        """, (staff_val, now_str, query_id))
+            UPDATE queries SET assigned_staff_id = ?, status = ?, updated_at = ? WHERE id = ?
+        """, (staff_val, new_status, now_str, query_id))
         
         if staff_val:
-            assigned_staff = db.execute("SELECT name FROM users WHERE id = ?", (staff_val,)).fetchone()
-            name_str = assigned_staff['name'] if assigned_staff else f"Staff ID {staff_val}"
-            log_details.append(f"Assigned to {name_str}")
-            create_notification(staff_val, query_id, 'Query Assigned', f"You have been assigned Query #{query_id}: {query['title']}", 'info')
+            assigned_target = db.execute("SELECT id, name, role, department, designation FROM users WHERE id = ?", (staff_val,)).fetchone()
+            if assigned_target:
+                target_name = assigned_target['name']
+                target_role = assigned_target['role']
+                target_desig = assigned_target['designation'] or ('Head of Department' if target_role == 'hod' else 'Staff')
+                
+                if staff_val == user['id'] and user['role'] == 'hod':
+                    # HOD self-assigns / takes ownership to resolve directly
+                    log_details.append(f"HOD {user['name']} self-assigned query to resolve directly")
+                    create_notification(
+                        query['user_id'],
+                        query_id,
+                        '🎓 Query In Progress with HOD',
+                        f"Department Head {user['name']} has taken your query #{query_id} to resolve directly.",
+                        'info'
+                    )
+                elif user['role'] in ['principal', 'admin'] and target_role == 'hod':
+                    # Principal or Admin assigns query to HOD
+                    log_details.append(f"Assigned by Principal to HOD {target_name}")
+                    create_notification(
+                        staff_val,
+                        query_id,
+                        '🏛️ Query Assigned by Principal',
+                        f"Principal assigned Query #{query_id} to you: '{query['title']}'. You can resolve it directly or assign to department staff.",
+                        'urgent' if query['priority'] in ['Critical', 'High'] else 'info'
+                    )
+                    create_notification(
+                        query['user_id'],
+                        query_id,
+                        'Query Assigned to HOD',
+                        f"Your query #{query_id} has been assigned to Head of Department ({target_name}) for resolution.",
+                        'info'
+                    )
+                elif user['role'] == 'hod':
+                    # HOD delegates to staff/faculty member
+                    log_details.append(f"Delegated by HOD {user['name']} to {target_name} ({target_desig})")
+                    create_notification(
+                        staff_val,
+                        query_id,
+                        '🎓 Query Assigned by HOD',
+                        f"HOD {user['name']} assigned Query #{query_id} to you: '{query['title']}'.",
+                        'urgent' if query['priority'] in ['Critical', 'High'] else 'info'
+                    )
+                    create_notification(
+                        query['user_id'],
+                        query_id,
+                        'Staff Resolver Assigned',
+                        f"Your query #{query_id} has been assigned to staff resolver {target_name} ({target_desig}) by Department HOD.",
+                        'info'
+                    )
+                else:
+                    log_details.append(f"Assigned to {target_name} ({target_desig})")
+                    create_notification(
+                        staff_val,
+                        query_id,
+                        'Query Assigned',
+                        f"You have been assigned Query #{query_id}: {query['title']}",
+                        'info'
+                    )
+                    create_notification(
+                        query['user_id'],
+                        query_id,
+                        'Resolver Assigned',
+                        f"Your query #{query_id} has been assigned to {target_name}.",
+                        'info'
+                    )
+        else:
+            log_details.append("Unassigned staff resolver")
 
     if log_details:
         cursor.execute("""
@@ -1265,7 +1623,16 @@ def reassign_query(query_id):
         """, (query_id, user['id'], "; ".join(log_details)))
         
     db.commit()
-    flash('Query assignments updated successfully.', 'success')
+    
+    # Broadcast status / assignment update
+    socketio.emit('status_update', {
+        'query_id': query_id,
+        'status': query['status'],
+        'assigned_staff_id': new_staff_id,
+        'updated_at': now_str
+    }, room=f"query_{query_id}")
+    
+    flash('Query assignments and resolution flow updated successfully.', 'success')
     return redirect(url_for('query_details', query_id=query_id))
 
 @app.route('/query/<int:query_id>/feedback', methods=['POST'])
@@ -1404,16 +1771,28 @@ def department_dashboard():
     elif user['role'] == 'hod' and user.get('course'):
         hod_c = user['course']
         stats = {
-            'new': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND status = 'New'", (dept, dept, hod_c)).fetchone()[0],
-            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (dept, dept, hod_c)).fetchone()[0],
-            'high': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND priority = 'High' AND status != 'Resolved'", (dept, dept, hod_c)).fetchone()[0],
-            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND status IN ('Assigned', 'In Progress')", (dept, dept, hod_c)).fetchone()[0],
-            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (dept, dept, hod_c, f"{today_str}%", f"{today_str}%")).fetchone()[0]
+            'new': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status = 'New'", (dept, dept, hod_c, user['id'])).fetchone()[0],
+            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0],
+            'high': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND priority = 'High' AND status != 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0],
+            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status IN ('Assigned', 'In Progress')", (dept, dept, hod_c, user['id'])).fetchone()[0],
+            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (dept, dept, hod_c, user['id'], f"{today_str}%", f"{today_str}%")).fetchone()[0]
         }
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
-            WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND first_response_at IS NOT NULL
-        """, (dept, dept, hod_c)).fetchall()
+            WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND first_response_at IS NOT NULL
+        """, (dept, dept, hod_c, user['id'])).fetchall()
+    elif user['role'] == 'hod':
+        stats = {
+            'new': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status = 'New'", (dept, dept, user['id'])).fetchone()[0],
+            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (dept, dept, user['id'])).fetchone()[0],
+            'high': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND priority = 'High' AND status != 'Resolved'", (dept, dept, user['id'])).fetchone()[0],
+            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status IN ('Assigned', 'In Progress')", (dept, dept, user['id'])).fetchone()[0],
+            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (dept, dept, user['id'], f"{today_str}%", f"{today_str}%")).fetchone()[0]
+        }
+        resp_rows = db.execute("""
+            SELECT created_at, first_response_at FROM queries 
+            WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND first_response_at IS NOT NULL
+        """, (dept, dept, user['id'])).fetchall()
     else:
         stats = {
             'new': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status = 'New'", (dept, dept, dept)).fetchone()[0],
@@ -1458,7 +1837,7 @@ def department_dashboard():
                staff.name as staff_name,
                (SELECT message FROM messages WHERE query_id = q.id ORDER BY created_at DESC LIMIT 1) as last_message,
                CASE 
-                   WHEN q.priority = 'Urgent' THEN 1
+                   WHEN q.priority IN ('Critical', 'Urgent') THEN 1
                    WHEN q.priority = 'High' THEN 2
                    WHEN q.priority = 'Medium' THEN 3
                    ELSE 4
@@ -1471,34 +1850,96 @@ def department_dashboard():
     params = []
     
     if is_resolver:
-        # Staff and Faculty resolvers see all queries assigned to them
-        sql += " AND q.assigned_staff_id = ?"
-        params.append(user['id'])
-        if dept_param and dept_param not in ['All', 'All Departments', '']:
-            sql += " AND q.department = ?"
-            params.append(dept_param)
-    elif user['role'] == 'hod' and user.get('course'):
-        # HOD sees queries for their department and specific course/degree
-        sql += " AND (q.department = ? OR ? = 'All') AND (q.course = ? OR q.course IS NULL)"
-        params.extend([dept, dept, user['course']])
+        staff_dept = user['department'] if user.get('department') else 'Computer Science & Engineering (CSE)'
+        if user['role'] == 'office_staff':
+            staff_dept = 'Administrative'
+            
+        if view_mode == 'received':
+            # Department's incoming received query queue
+            sql += " AND (q.department = ? OR q.department = 'Academics')"
+            params.append(staff_dept)
+        elif view_mode == 'unresolved':
+            sql += " AND q.assigned_staff_id = ? AND q.status != 'Resolved'"
+            params.append(user['id'])
+        elif view_mode == 'resolved':
+            sql += " AND q.assigned_staff_id = ? AND q.status = 'Resolved'"
+            params.append(user['id'])
+        else:
+            # view_mode in ['assigned', ''] (default for resolver): queries specifically assigned to them from HOD / Principal / AO
+            sql += " AND q.assigned_staff_id = ?"
+            params.append(user['id'])
+            if dept_param and dept_param not in ['All', 'All Departments', '']:
+                sql += " AND q.department = ?"
+                params.append(dept_param)
+    elif user['role'] == 'hod':
+        hod_c = user.get('course')
+        if view_mode == 'assigned':
+            # Specifically queries assigned directly to this HOD (e.g. by Principal or Leadership)
+            sql += " AND q.assigned_staff_id = ?"
+            params.append(user['id'])
+        elif view_mode == 'delegated':
+            # Queries delegated to staff resolvers
+            if hod_c:
+                sql += " AND (q.department = ? OR ? = 'All') AND (q.course = ? OR q.course IS NULL) AND q.assigned_staff_id IS NOT NULL AND q.assigned_staff_id != ?"
+                params.extend([dept, dept, hod_c, user['id']])
+            else:
+                sql += " AND (q.department = ? OR ? = 'All') AND q.assigned_staff_id IS NOT NULL AND q.assigned_staff_id != ?"
+                params.extend([dept, dept, user['id']])
+        elif view_mode in ['received', 'all', '']:
+            # All received queries for this department
+            if hod_c:
+                sql += " AND (q.department = ? OR ? = 'All') AND (q.course = ? OR q.course IS NULL)"
+                params.extend([dept, dept, hod_c])
+            else:
+                sql += " AND (q.department = ? OR ? = 'All')"
+                params.extend([dept, dept])
+        else:
+            # unresolved, resolved, unassigned, recent
+            if hod_c:
+                sql += " AND (((q.department = ? OR ? = 'All') AND (q.course = ? OR q.course IS NULL)) OR q.assigned_staff_id = ?)"
+                params.extend([dept, dept, hod_c, user['id']])
+            else:
+                sql += " AND (q.department = ? OR ? = 'All' OR q.assigned_staff_id = ?)"
+                params.extend([dept, dept, user['id']])
+    elif user['role'] == 'ao':
+        if view_mode == 'assigned':
+            # Specifically queries assigned directly to AO (e.g. from Principal) or assigned administrative team queries
+            sql += " AND (q.assigned_staff_id = ? OR (q.department = 'Administrative' AND q.assigned_staff_id IS NOT NULL))"
+            params.append(user['id'])
+        elif view_mode == 'delegated':
+            sql += " AND q.department = 'Administrative' AND q.assigned_staff_id IS NOT NULL AND q.assigned_staff_id != ?"
+            params.append(user['id'])
+        elif view_mode in ['received', 'all', '']:
+            # All received queries for Administrative Desk
+            sql += " AND q.department = 'Administrative'"
+        else:
+            sql += " AND (q.department = 'Administrative' OR q.assigned_staff_id = ?)"
+            params.append(user['id'])
     else:
-        # AO / Principal / Central Admin see department queries
+        # Principal / Central Admin see department queries
         if dept and dept not in ['All', 'All Departments']:
             sql += " AND q.department = ?"
             params.append(dept)
         
-    if view_mode == 'unresolved' or not view_mode:
-        sql += " AND q.status != 'Resolved'"
+    if view_mode in ['received', 'all', 'assigned', 'delegated'] or (is_resolver and view_mode in ['unresolved', 'resolved']):
+        pass  # Filter already applied above
     elif view_mode == 'unassigned' and user['role'] in ['hod', 'admin', 'ao', 'principal']:
         sql += " AND q.assigned_staff_id IS NULL AND q.status != 'Resolved'"
-    elif view_mode == 'all':
-        pass  # all queries
+    elif view_mode == 'unresolved':
+        sql += " AND q.status != 'Resolved'"
+    elif view_mode == 'resolved':
+        sql += " AND q.status = 'Resolved'"
     elif view_mode == 'recent':
         pass  # will order by created_at DESC
+    else:
+        view_mode = 'received'
         
     if priority_filter:
-        sql += " AND q.priority = ?"
-        params.append(priority_filter)
+        if priority_filter in ['Critical', 'Urgent']:
+            sql += " AND q.priority IN ('Critical', 'Urgent')"
+        else:
+            sql += " AND q.priority = ?"
+            params.append(priority_filter)
     if status_filter:
         sql += " AND q.status = ?"
         params.append(status_filter)
@@ -1515,19 +1956,45 @@ def department_dashboard():
     queries = db.execute(sql, params).fetchall()
     
     # Counts for quick tabs
+    delegated_count = 0
     if is_resolver:
+        staff_dept = user['department'] if user.get('department') else 'Computer Science & Engineering (CSE)'
+        if user['role'] == 'office_staff':
+            staff_dept = 'Administrative'
+        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ? OR department = 'Academics'", (staff_dept,)).fetchone()[0]
+        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
+        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR department = 'Academics') AND assigned_staff_id IS NULL AND status != 'Resolved'", (staff_dept,)).fetchone()[0]
         unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status != 'Resolved'", (user['id'],)).fetchone()[0]
-        unassigned_count = 0
-        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
+        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved'", (user['id'],)).fetchone()[0]
     elif user['role'] == 'hod' and user.get('course'):
         hod_c = user['course']
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND status != 'Resolved'", (dept, dept, hod_c)).fetchone()[0]
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept, hod_c)).fetchone()[0]
         total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL)", (dept, dept, hod_c)).fetchone()[0]
+        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
+        delegated_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ?", (dept, dept, hod_c, user['id'])).fetchone()[0]
+        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept, hod_c)).fetchone()[0]
+        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status != 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0]
+        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status = 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0]
+    elif user['role'] == 'hod':
+        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All')", (dept, dept)).fetchone()[0]
+        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
+        delegated_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ?", (dept, dept, user['id'])).fetchone()[0]
+        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept)).fetchone()[0]
+        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status != 'Resolved'", (dept, dept, user['id'])).fetchone()[0]
+        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status = 'Resolved'", (dept, dept, user['id'])).fetchone()[0]
+    elif user['role'] == 'ao':
+        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative'").fetchone()[0]
+        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? OR (department = 'Administrative' AND assigned_staff_id IS NOT NULL)", (user['id'],)).fetchone()[0]
+        delegated_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ?", (user['id'],)).fetchone()[0]
+        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND assigned_staff_id IS NULL AND status != 'Resolved'").fetchone()[0]
+        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND status != 'Resolved'").fetchone()[0]
+        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND status = 'Resolved'").fetchone()[0]
     else:
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
         total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments')", (dept, dept, dept)).fetchone()[0]
+        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND assigned_staff_id IS NOT NULL", (dept, dept, dept)).fetchone()[0]
+        delegated_count = assigned_count
+        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
+        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
+        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status = 'Resolved'", (dept, dept, dept)).fetchone()[0]
     
     # Department info
     dept_info = db.execute("SELECT * FROM departments WHERE name = ?", (dept,)).fetchone()
@@ -1545,6 +2012,9 @@ def department_dashboard():
         search_query=search_query,
         unresolved_count=unresolved_count,
         unassigned_count=unassigned_count,
+        assigned_count=assigned_count,
+        delegated_count=delegated_count,
+        resolved_count=resolved_count,
         total_dept_count=total_dept_count
     )
 
@@ -1979,9 +2449,51 @@ def analytics_data():
 
     # 1. Principal Desk Analysis (Category = 'Others' or department = 'Others')
     principal_analysis = compute_pillar("(q.category = 'Others' OR q.department = 'Others')", principal_topic_sql)
+    prin_dept_rows = db.execute("""
+        SELECT COALESCE(u.department, q.department, 'General Campus') as dept_name, COUNT(q.id) as count
+        FROM queries q
+        LEFT JOIN users u ON q.user_id = u.id
+        WHERE (q.category = 'Others' OR q.department = 'Others')
+        GROUP BY dept_name
+        ORDER BY count DESC
+    """).fetchall()
+    principal_analysis['departments'] = {'labels': [r['dept_name'] for r in prin_dept_rows], 'data': [r['count'] for r in prin_dept_rows]}
 
     # 2. AO Desk Analysis (Category = 'Administrative' or department = 'Administrative')
     ao_analysis = compute_pillar("(q.category = 'Administrative' OR q.department = 'Administrative')", ao_topic_sql)
+    
+    # AO Administrative Office Staff List with resolution statistics
+    ao_staff_rows = db.execute("""
+        SELECT id, name, email, designation, role 
+        FROM users 
+        WHERE role IN ('office_staff', 'staff') AND (department = 'Administrative' OR department IS NULL) AND is_active = 1
+        ORDER BY name ASC
+    """).fetchall()
+    if not ao_staff_rows:
+        ao_staff_rows = db.execute("""
+            SELECT id, name, email, designation, role 
+            FROM users 
+            WHERE role IN ('office_staff', 'staff') AND is_active = 1
+            ORDER BY name ASC
+        """).fetchall()
+        
+    ao_staff_workload = []
+    for s in ao_staff_rows:
+        sid = s['id']
+        t_asg = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (sid,)).fetchone()[0]
+        s_res = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved'", (sid,)).fetchone()[0]
+        p_act = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('In Progress', 'Waiting for User', 'Assigned')", (sid,)).fetchone()[0]
+        ao_staff_workload.append({
+            'id': sid,
+            'name': s['name'],
+            'email': s['email'],
+            'designation': s['designation'] or 'Office Staff / Administrative Staff',
+            'assigned': t_asg,
+            'resolved': s_res,
+            'pending': p_act,
+            'solved_percent': round((s_res / t_asg * 100), 1) if t_asg > 0 else 0
+        })
+    ao_analysis['staff_workload'] = ao_staff_workload
 
     # 3. HODs Academic Analysis (Category = 'Academics' or academic branches)
     hod_analysis = compute_pillar("(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others'))", hod_topic_sql)
@@ -2215,6 +2727,22 @@ def analytics_data():
         'solved_percent': round((solved_q / total_q * 100), 1) if total_q > 0 else 0
     }
     
+    if is_hod:
+        return jsonify({
+            'role': role,
+            'is_hod': True,
+            'is_ao': False,
+            'is_principal': False,
+            'is_admin': False,
+            'user_dept': hod_dept,
+            'user_course': user.get('course'),
+            'branch_analysis': branch_analysis,
+            'summary': summary,
+            'years': {'labels': [r['year_label'] for r in year_rows], 'data': [r['count'] for r in year_rows]},
+            'categories': {'labels': [r['category'] for r in cat_rows], 'data': [r['count'] for r in cat_rows]},
+            'statuses': {'labels': [r['status'] for r in status_rows], 'data': [r['count'] for r in status_rows]}
+        })
+
     return jsonify({
         'role': role,
         'is_hod': is_hod,

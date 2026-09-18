@@ -3,25 +3,30 @@
 {% block title %}Track Query Status | Department Query Management Portal{% endblock %}
 
 {% block content %}
-<div style="max-width: 860px; margin: 1.5rem auto 3rem;">
+<div style="max-width: 860px; margin: 1.25rem auto 3rem;">
+
+  <!-- Top Action Navigation Strip -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+    <a href="{{ url_for('index') }}" class="btn" style="background: #ffffff; color: var(--primary-color, #4f46e5); border: 2px solid #cbd5e1; font-weight: 800; padding: 0.65rem 1.4rem; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); transition: all 0.2s ease;">
+      <span style="font-size: 1.25rem;">🏠</span> ← Back to Portal Home
+    </a>
+    <a href="{{ url_for('submit_query') }}" class="btn btn-primary" style="font-weight: 800; padding: 0.65rem 1.35rem; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.45rem; border-radius: 8px; box-shadow: var(--shadow-sm);">
+      <span style="font-size: 1.1rem;">✍️</span> + Post New Query
+    </a>
+  </div>
 
   <!-- Search Header Card -->
   <div class="card" style="padding: 1.75rem; background: #ffffff; border: 1px solid var(--border-color); box-shadow: var(--shadow); margin-bottom: 2rem;">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
-      <div>
-        <h1 style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem;">
-          🔍 Track Query Status & Live Resolver Chat
-        </h1>
-        <p style="font-size: 0.85rem; color: #64748b; margin: 0;">
-          Enter your unique Query ID to view real-time resolution timeline, assigned staff, and chat directly.
-        </p>
-      </div>
-      <a href="{{ url_for('submit_query') }}" class="btn btn-secondary btn-sm" style="font-weight: 700;">
-        + Post New Query
-      </a>
+    <div style="margin-bottom: 1.25rem;">
+      <h1 style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem;">
+        🔍 Track Query Status & Live Resolver Chat
+      </h1>
+      <p style="font-size: 0.88rem; color: #64748b; margin: 0;">
+        Enter your unique Query ID to view real-time resolution timeline, assigned staff, and chat directly.
+      </p>
     </div>
 
-    <form method="GET" action="{{ url_for('track_query') }}" style="display: flex; gap: 0.75rem; max-width: 500px;">
+    <form method="GET" action="{{ url_for('track_query') }}" style="display: flex; gap: 0.75rem; max-width: 540px;">
       <input type="text" name="query_id" class="form-control" placeholder="Enter Query ID (e.g. 1042 or #1042)" value="{{ query_id_input if query_id_input else '' }}" required autofocus style="font-size: 1rem; padding: 0.75rem 1rem; font-weight: 600;">
       <button type="submit" class="btn btn-primary" style="font-weight: 800; padding: 0.75rem 1.5rem; white-space: nowrap;">
         Search Query →
@@ -45,11 +50,11 @@
             {% elif query.category == 'Administrative' %}🏢 Administrative
             {% else %}🔧 Campus Support (Others){% endif %}
           </span>
-          <span class="badge badge-{{ query.priority.lower() }}">
-            {{ query.priority }} Priority
+          <span class="badge badge-{{ (query.priority or 'Medium') | lower }}">
+            {{ query.priority or 'Medium' }} Priority
           </span>
-          <span class="badge badge-status-{{ query.status.lower().replace(' ', '-') }}">
-            {{ query.status }}
+          <span class="badge badge-status-{{ (query.status or 'New') | lower | replace(' ', '-') }}">
+            {{ query.status or 'New' }}
           </span>
         </div>
         <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin: 0.5rem 0 0.25rem;">
@@ -61,7 +66,10 @@
       </div>
 
       <!-- Quick Action Buttons -->
-      <div style="display: flex; gap: 0.5rem;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" style="font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
+          🏠 Back to Home
+        </a>
         <button onclick="window.print()" class="btn btn-secondary btn-sm" style="font-weight: 700;">
           🖨️ Print
         </button>
@@ -100,7 +108,7 @@
             3. Staff Assigned
           </strong>
           <span style="font-size: 0.7rem; color: #64748b;">
-            {% if staff_resolver %}{{ staff_resolver.name }}{% else %}Awaiting Assignment{% endif %}
+            {% if staff_presence %}{{ staff_presence.name }}{% elif staff_resolver %}{{ staff_resolver.name }}{% else %}Awaiting Assignment{% endif %}
           </span>
         </div>
 
@@ -117,38 +125,77 @@
       </div>
     </div>
 
-    <!-- Assigned Authority / Resolver Details Card -->
-    <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.75rem;">
-      <div style="font-size: 0.78rem; font-weight: 800; text-transform: uppercase; color: #475569; margin-bottom: 0.75rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.35rem;">
-        👤 Handling Authority & Resolver Information
+    <!-- Multi-Party Live Presence Bar (Student Submitter, Governing Authority (HOD/AO/Principal), Assigned Resolver) -->
+    <div class="card" style="margin-bottom: 1.5rem; padding: 0.85rem 1.25rem; background: #ffffff; border: 1.5px solid #cbd5e1; box-shadow: var(--shadow-xs);">
+      <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.6rem; display: flex; align-items: center; justify-content: space-between;">
+        <span>👥 Active Query Participants & Live Status</span>
+        <span style="font-size: 0.7rem; color: #16a34a; font-weight: 700;">● Real-Time Online Presence</span>
       </div>
-
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
-        <!-- Routed Department / Primary Authority -->
-        <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: var(--radius-sm); border-left: 4px solid #4f46e5;">
-          <div style="font-size: 0.72rem; color: #64748b; text-transform: uppercase; font-weight: 700;">Department Authority Desk:</div>
-          <strong style="font-size: 0.95rem; color: #0f172a; display: block; margin-top: 2px;">
-            {% if query.category == 'Academics' %}
-              🎓 {{ query.department }} (HOD: {{ hod_resolver.name if hod_resolver else 'Department HOD' }})
-            {% elif query.category == 'Administrative' %}
-              🏢 Administrative Office (AO: Mrs. Eleanor Wright)
-            {% else %}
-              🏛️ Principal Office (Dr. Alan Turing)
-            {% endif %}
-          </strong>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem;">
+        
+        <!-- 1. Submitter Status (Student - You) -->
+        <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 0.65rem 0.85rem; display: flex; align-items: center; gap: 0.65rem;">
+          <div style="position: relative; flex-shrink: 0;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: {% if submitter_presence and submitter_presence.is_faculty %}#16a34a{% else %}#4f46e5{% endif %}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem;">
+              {% if submitter_presence and submitter_presence.is_faculty %}👩‍🏫{% else %}👨‍🎓{% endif %}
+            </div>
+            <span class="user-presence-dot" data-user-id="{{ submitter_presence.id if submitter_presence else query.user_id }}" style="position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: #16a34a;"></span>
+          </div>
+          <div style="overflow: hidden; flex-grow: 1;">
+            <div style="font-size: 0.72rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">
+              {{ submitter_presence.role if submitter_presence else 'Student Submitter (You)' }}
+            </div>
+            <div style="font-size: 0.86rem; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ submitter_presence.name if submitter_presence else 'You (Student)' }}
+            </div>
+            <div class="user-presence-text" data-user-id="{{ submitter_presence.id if submitter_presence else query.user_id }}" style="font-size: 0.72rem; color: #16a34a; font-weight: 700;">
+              🟢 Online Now (Active)
+            </div>
+          </div>
         </div>
 
-        <!-- Assigned Resolver Staff -->
-        <div style="background: #f8fafc; padding: 0.85rem 1rem; border-radius: var(--radius-sm); border-left: 4px solid #0284c7;">
-          <div style="font-size: 0.72rem; color: #64748b; text-transform: uppercase; font-weight: 700;">Assigned Staff Resolver:</div>
-          <strong style="font-size: 0.95rem; color: #0f172a; display: block; margin-top: 2px;">
-            {% if staff_resolver %}
-              👨‍🏫 {{ staff_resolver.name }} ({{ staff_resolver.designation or 'Staff Resolver' }})
-            {% else %}
-              ⏳ Pending HOD / Desk Assignment
-            {% endif %}
-          </strong>
+        <!-- 2. Governing Authority Status (HOD / AO / Principal) -->
+        <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 0.65rem 0.85rem; display: flex; align-items: center; gap: 0.65rem;">
+          <div style="position: relative; flex-shrink: 0;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: {% if authority_presence and authority_presence.role_type == 'ao' %}#0284c7{% elif authority_presence and authority_presence.role_type == 'principal' %}#d97706{% else %}#8b5cf6{% endif %}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem;">
+              {{ authority_presence.icon if authority_presence else '🎓' }}
+            </div>
+            <span class="user-presence-dot" {% if authority_presence and authority_presence.id %}data-user-id="{{ authority_presence.id }}"{% endif %} style="position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: {% if authority_presence and authority_presence.is_online %}#16a34a{% else %}#94a3b8{% endif %};"></span>
+          </div>
+          <div style="overflow: hidden; flex-grow: 1;">
+            <div style="font-size: 0.72rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">
+              {{ authority_presence.role_title if authority_presence else 'Resolution Authority' }}
+            </div>
+            <div style="font-size: 0.86rem; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ authority_presence.name if authority_presence else 'Department Authority' }}
+            </div>
+            <div class="user-presence-text" {% if authority_presence and authority_presence.id %}data-user-id="{{ authority_presence.id }}"{% endif %} style="font-size: 0.72rem; color: {% if authority_presence and authority_presence.is_online %}#16a34a{% else %}#64748b{% endif %}; font-weight: 700;">
+              {% if authority_presence and authority_presence.is_online %}🟢 Online Now{% elif authority_presence and authority_presence.last_active %}{{ authority_presence.last_active | timeago }}{% else %}Recently active{% endif %}
+            </div>
+          </div>
         </div>
+
+        <!-- 3. Assigned Staff / Resolver Status -->
+        <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 0.65rem 0.85rem; display: flex; align-items: center; gap: 0.65rem;">
+          <div style="position: relative; flex-shrink: 0;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: {% if staff_presence and staff_presence.role_type == 'hod' %}#8b5cf6{% elif staff_presence %}#0284c7{% else %}#cbd5e1{% endif %}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem;">
+              {% if staff_presence and staff_presence.role_type == 'hod' %}🎓{% elif staff_presence %}🛠️{% else %}⏳{% endif %}
+            </div>
+            <span class="user-presence-dot" {% if query.assigned_staff_id %}data-user-id="{{ query.assigned_staff_id }}"{% endif %} style="position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: {% if staff_presence and staff_presence.is_online %}#16a34a{% else %}#94a3b8{% endif %};"></span>
+          </div>
+          <div style="overflow: hidden; flex-grow: 1;">
+            <div style="font-size: 0.72rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">
+              {{ staff_presence.role if staff_presence else 'Resolver Status' }}
+            </div>
+            <div style="font-size: 0.86rem; font-weight: 800; color: {% if staff_presence %}#0f172a{% else %}#b45309{% endif %}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {{ staff_presence.name if staff_presence else 'Pending Staff Assignment' }}
+            </div>
+            <div class="user-presence-text" {% if query.assigned_staff_id %}data-user-id="{{ query.assigned_staff_id }}"{% endif %} style="font-size: 0.72rem; color: {% if staff_presence and staff_presence.is_online %}#16a34a{% elif staff_presence and staff_presence.last_active %}#64748b{% else %}#b45309{% endif %}; font-weight: 700;">
+              {% if staff_presence and staff_presence.is_online %}🟢 Online Now{% elif staff_presence and staff_presence.last_active %}{{ staff_presence.last_active | timeago }}{% else %}Awaiting assignment{% endif %}
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -246,6 +293,13 @@
   </div>
   {% endif %}
 
+  <!-- Bottom Navigation / Back to Home Button -->
+  <div style="margin-top: 2rem; text-align: center;">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary" style="font-weight: 700; padding: 0.65rem 1.75rem; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: var(--shadow-xs);">
+      🏠 Back to Portal Home
+    </a>
+  </div>
+
 </div>
 
 <script>
@@ -254,6 +308,52 @@ document.addEventListener('DOMContentLoaded', () => {
   if (chatThread) {
     chatThread.scrollTop = chatThread.scrollHeight;
   }
+
+  {% if query %}
+  // Real-time socket connection for student query tracking
+  if (typeof io !== 'undefined') {
+    const socket = io();
+    const queryId = "{{ query.id }}";
+    const submitterId = {{ query.user_id }};
+
+    socket.on('connect', () => {
+      socket.emit('join_query', { query_id: queryId });
+      socket.emit('user_online', { user_id: submitterId });
+    });
+
+    socket.on('presence_update', (data) => {
+      if (!data || !data.user_id) return;
+      const dots = document.querySelectorAll(`.user-presence-dot[data-user-id="${data.user_id}"]`);
+      const texts = document.querySelectorAll(`.user-presence-text[data-user-id="${data.user_id}"]`);
+
+      dots.forEach(dot => {
+        dot.style.background = data.is_online ? '#16a34a' : '#94a3b8';
+      });
+
+      texts.forEach(txt => {
+        if (data.is_online) {
+          txt.textContent = '🟢 Online Now';
+          txt.style.color = '#16a34a';
+        } else {
+          txt.textContent = data.last_active || 'Recently active';
+          txt.style.color = '#64748b';
+        }
+      });
+    });
+
+    socket.on('chat_message', (data) => {
+      if (data && data.query_id == queryId && !data.is_internal_note) {
+        window.location.reload();
+      }
+    });
+
+    socket.on('status_update', (data) => {
+      if (data && data.query_id == queryId) {
+        window.location.reload();
+      }
+    });
+  }
+  {% endif %}
 });
 </script>
 {% endblock %}
