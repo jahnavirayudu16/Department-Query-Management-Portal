@@ -799,6 +799,123 @@ class TestDQMSystem(unittest.TestCase):
         self.assertEqual(res_staff_received.status_code, 200)
         self.client.get('/logout')
 
+    def test_faculty_query_tracking_shows_faculty_role(self):
+        """Verify that faculty queries tracked via /track-query display Faculty (You) instead of Student (You)."""
+        # Submit a faculty query
+        res = self.client.post('/submit-query', data={
+            'query_type': 'faculty',
+            'department': 'Computer Science & Engineering (CSE)',
+            'title': 'Faculty Salary Increment Request',
+            'description': 'Increment the salary as per annual review.'
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+
+        # Extract query id
+        import re
+        m = re.search(r'#(\d+)', res.data.decode('utf-8'))
+        self.assertIsNotNone(m)
+        qid = m.group(1)
+
+        # Track query status
+        track_res = self.client.get(f'/track-query?query_id={qid}')
+        self.assertEqual(track_res.status_code, 200)
+        content = track_res.data.decode('utf-8')
+        self.assertIn('Faculty (You)', content)
+        self.assertIn('Faculty Query', content)
+        self.assertNotIn('Student (You)', content)
+
+    def test_faculty_academic_hierarchy_submission(self):
+        """Verify faculty query submission with academic level (UG, PG), course, department, designation."""
+        # Submit a PG Faculty query (e.g. M.Tech in CSE)
+        res_pg = self.client.post('/submit-query', data={
+            'query_type': 'faculty',
+            'faculty_level': 'PG',
+            'faculty_course': 'M.Tech',
+            'faculty_department': 'Computer Science & Engineering (CSE)',
+            'faculty_designation': 'Associate Professor',
+            'faculty_id': 'FAC-PG-001',
+            'name': 'Dr. Sharma',
+            'email': 'dr.sharma@college.edu',
+            'title': 'M.Tech Lab GPU Server Allocation',
+            'description': 'Need additional GPU cluster server for M.Tech advanced deep learning projects.'
+        }, follow_redirects=True)
+        self.assertEqual(res_pg.status_code, 200)
+
+        # Check DB records
+        db = sqlite3.connect(Config.DATABASE_PATH)
+        db.row_factory = sqlite3.Row
+        q = db.execute("SELECT * FROM queries WHERE title = 'M.Tech Lab GPU Server Allocation'").fetchone()
+        self.assertIsNotNone(q)
+        self.assertEqual(q['level'], 'PG')
+        self.assertEqual(q['course'], 'M.Tech')
+        self.assertEqual(q['department'], 'Computer Science & Engineering (CSE)')
+
+        # Check user record
+        u = db.execute("SELECT * FROM users WHERE email = 'dr.sharma@college.edu'").fetchone()
+        self.assertIsNotNone(u)
+        self.assertEqual(u['level'], 'PG')
+        self.assertEqual(u['course'], 'M.Tech')
+        self.assertEqual(u['department'], 'Computer Science & Engineering (CSE)')
+        self.assertEqual(u['designation'], 'Associate Professor')
+        self.assertEqual(u['roll_no'], 'FAC-PG-001')
+        qid = q['id']
+        db.close()
+
+        # Track query displays M.Tech and Faculty details
+        res_track = self.client.get(f'/track-query?query_id={qid}')
+        self.assertEqual(res_track.status_code, 200)
+        track_html = res_track.data.decode('utf-8')
+        self.assertIn('Associate Professor', track_html)
+        self.assertIn('M.Tech', track_html)
+
+        # HOD views query details with faculty designation
+        self.client.post('/login', data={'email': 'cse-hod@college.com', 'password': 'hod123'})
+        res_det = self.client.get(f'/query/{qid}')
+        self.assertEqual(res_det.status_code, 200)
+        det_html = res_det.data.decode('utf-8')
+        self.assertIn('Associate Professor', det_html)
+        self.assertIn('M.Tech', det_html)
+        self.client.get('/logout')
+
+    def test_track_query_non_existent_and_attribute_error_prevention(self):
+        """Verify tracking non-existent IDs displays 'No Query Found', does not crash with AttributeError, and opens only valid queries."""
+        # 1. Non-existent query ID
+        res_missing = self.client.get('/track-query?query_id=99999')
+        self.assertEqual(res_missing.status_code, 200)
+        missing_html = res_missing.data.decode('utf-8')
+        self.assertIn('No Query Found for ID #99999', missing_html)
+        self.assertNotIn('Resolution Lifecycle Progress:', missing_html)
+
+        # 2. Invalid non-numeric query ID
+        res_invalid = self.client.get('/track-query?query_id=invalid_xyz')
+        self.assertEqual(res_invalid.status_code, 200)
+        invalid_html = res_invalid.data.decode('utf-8')
+        self.assertIn('Invalid Query ID', invalid_html)
+        self.assertNotIn('Resolution Lifecycle Progress:', invalid_html)
+
+        # 3. Existing query (ID 1) opens cleanly without AttributeError
+        res_valid = self.client.get('/track-query?query_id=1')
+        self.assertEqual(res_valid.status_code, 200)
+        valid_html = res_valid.data.decode('utf-8')
+        self.assertIn('Query #1', valid_html)
+        self.assertIn('Resolution Lifecycle Progress:', valid_html)
+        self.assertNotIn('No Query Found for ID', valid_html)
+
+        # 4. Logged-in Staff tracks non-existent ID -> shows No Query Found, does not crash
+        self.client.post('/login', data={'email': 'cse-staff@college.com', 'password': 'staff123'})
+        res_staff_missing = self.client.get('/track-query?query_id=88888')
+        self.assertEqual(res_staff_missing.status_code, 200)
+        staff_missing_html = res_staff_missing.data.decode('utf-8')
+        self.assertIn('No Query Found for ID #88888', staff_missing_html)
+
+        # Logged-in Staff tracks existing ID -> opens query and provides Resolution Desk button
+        res_staff_valid = self.client.get('/track-query?query_id=1')
+        self.assertEqual(res_staff_valid.status_code, 200)
+        staff_valid_html = res_staff_valid.data.decode('utf-8')
+        self.assertIn('Query #1', staff_valid_html)
+        self.assertIn('Open in Resolution Desk', staff_valid_html)
+        self.client.get('/logout')
+
 if __name__ == '__main__':
     unittest.main()
 

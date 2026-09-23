@@ -40,7 +40,8 @@
           {{ query.title }}
         </h2>
         <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
-          <span>👤 <strong>{{ query.user_role | capitalize }}</strong> (Protected Submitter)</span>
+          <span>👤 <strong>{{ query.user_role | capitalize }}</strong>{% if query.user_designation %} ({{ query.user_designation }}){% endif %}</span>
+          {% if query.course %}<span>🎓 <strong>{{ query.course }}{% if query.level %} ({{ query.level }}){% endif %}</strong></span>{% endif %}
           <span>🏢 <strong>{{ query.department }} Wing</strong></span>
           <span>📂 {{ query.category }}</span>
           <span>🕒 {{ query.created_at | timeago }}</span>
@@ -422,8 +423,26 @@
         <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem;">
           <div>
             <span style="color: var(--text-muted); display: block; font-size: 0.75rem;">SUBMITTER</span>
-            <strong>{{ query.user_role | capitalize }}</strong><br>
-            <span style="color: var(--text-muted); font-size: 0.8rem;">Protected Anonymous Identity</span>
+            <strong>{{ query.user_role | capitalize }}</strong>
+            {% if query.user_role in ['faculty', 'staff'] %}
+              <div style="font-weight: 700; color: #166534; font-size: 0.84rem; margin-top: 2px;">
+                👩‍🏫 {{ query.user_designation or 'Faculty Member' }}
+              </div>
+              <div style="font-size: 0.78rem; color: #475569;">
+                {{ query.course or query.user_course or '' }}{% if query.level or query.user_level %} ({{ query.level or query.user_level }}){% endif %}
+              </div>
+              {% if query.roll_no %}
+              <div style="font-size: 0.76rem; color: #64748b;">Staff ID: {{ query.roll_no }}</div>
+              {% endif %}
+            {% else %}
+              <div style="font-size: 0.78rem; color: #475569;">
+                {{ query.course or 'UG' }} • Year {{ query.year or 1 }}
+              </div>
+              {% if query.roll_no %}
+              <div style="font-size: 0.76rem; color: #64748b;">Roll No: {{ query.roll_no }}</div>
+              {% endif %}
+            {% endif %}
+            <span style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Protected Submitter Identity</span>
           </div>
 
           <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem;">

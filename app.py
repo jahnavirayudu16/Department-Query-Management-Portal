@@ -537,11 +537,12 @@ def submit_query():
         
         if is_faculty_query:
             submitter_role = 'faculty'
-            level = None
-            course = None
+            level = request.form.get('faculty_level') or request.form.get('level', 'UG').strip()
+            course = request.form.get('faculty_course') or request.form.get('course', 'B.Tech').strip()
             year_val = None
             department_input = request.form.get('faculty_department') or request.form.get('department', '').strip()
-            roll_no_input = None
+            roll_no_input = request.form.get('faculty_id') or request.form.get('employee_id', '').strip() or None
+            designation_input = request.form.get('faculty_designation', '').strip() or 'Faculty Member'
         else:
             submitter_role = 'student'
             level = request.form.get('level', 'UG').strip()
@@ -550,6 +551,7 @@ def submit_query():
             year_val = int(year_str) if year_str and year_str.isdigit() else 1
             department_input = request.form.get('department', '').strip()
             roll_no_input = request.form.get('roll_no', '').strip()
+            designation_input = None
         
         if not title or not description:
             flash('Please provide both a query title and a detailed problem description.', 'warning')
@@ -583,8 +585,8 @@ def submit_query():
         if user:
             submitter_id = user['id']
             cursor.execute("""
-                UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = COALESCE(?, department), last_active_at = ? WHERE id = ?
-            """, (level, course, year_val, department_input, now_str, submitter_id))
+                UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = COALESCE(?, department), designation = COALESCE(?, designation), last_active_at = ? WHERE id = ?
+            """, (level, course, year_val, department_input, designation_input, now_str, submitter_id))
         else:
             # Direct anonymous or email-backed submission
             existing_user = None
@@ -594,16 +596,16 @@ def submit_query():
             if existing_user:
                 submitter_id = existing_user['id']
                 cursor.execute("""
-                    UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = COALESCE(?, department), last_active_at = ? WHERE id = ?
-                """, (level, course, year_val, department_input or department, now_str, submitter_id))
+                    UPDATE users SET level = COALESCE(?, level), course = COALESCE(?, course), year = COALESCE(?, year), department = COALESCE(?, department), designation = COALESCE(?, designation), last_active_at = ? WHERE id = ?
+                """, (level, course, year_val, department_input or department, designation_input, now_str, submitter_id))
             else:
                 submitter_name = name_input if name_input else ('Faculty Member' if is_faculty_query else 'Student')
                 submitter_email = email_input if email_input else f"{'faculty' if is_faculty_query else 'student'}_{int(datetime.now().timestamp())}_{random.randint(1000, 9999)}@college.edu"
                 temp_pass = generate_password_hash('portal123')
                 cursor.execute("""
-                    INSERT INTO users (name, email, password_hash, role, level, course, year, department, roll_no, is_active, last_active_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                """, (submitter_name, submitter_email, temp_pass, submitter_role, level, course, year_val, department_input or department, roll_no_input, now_str))
+                    INSERT INTO users (name, email, password_hash, role, level, course, year, department, roll_no, designation, is_active, last_active_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """, (submitter_name, submitter_email, temp_pass, submitter_role, level, course, year_val, department_input or department, roll_no_input, designation_input, now_str))
                 submitter_id = cursor.lastrowid
                 
         if submitter_id not in ONLINE_USERS:
@@ -732,27 +734,7 @@ def query_submitted(query_id):
 def track_query():
     """Direct Query Tracking & Live Two-Way Chat without requiring student password login."""
     query_id_input = request.args.get('query_id') or request.form.get('query_id')
-
-    # Executive & Faculty/Staff roles manage queries from their official desks and dashboards
     logged_in_user = get_current_user()
-    if logged_in_user and logged_in_user.get('role') != 'student':
-        if query_id_input:
-            clean_id = ''.join(c for c in str(query_id_input) if c.isdigit())
-            if clean_id:
-                return redirect(url_for('query_details', query_id=int(clean_id)))
-        user_role = logged_in_user.get('role')
-        if user_role == 'hod':
-            return redirect(url_for('department_dashboard'))
-        elif user_role == 'ao':
-            return redirect(url_for('department_dashboard', dept='Administrative'))
-        elif user_role == 'principal':
-            return redirect(url_for('department_dashboard', dept='Others'))
-        elif user_role == 'admin':
-            return redirect(url_for('admin_dashboard'))
-        elif user_role in ['staff', 'office_staff']:
-            return redirect(url_for('department_dashboard'))
-        elif user_role == 'faculty':
-            return redirect(url_for('dashboard'))
 
     db = get_db()
     query = None
@@ -768,17 +750,18 @@ def track_query():
     if request.method == 'POST' and request.form.get('action') == 'send_reply':
         target_qid = request.form.get('target_query_id')
         reply_text = request.form.get('message', '').strip()
-        sender_name = request.form.get('sender_name', '').strip() or 'Student (Submitter)'
-        
         if target_qid and (reply_text or 'attachment' in request.files):
-            q_row = db.execute("SELECT * FROM queries WHERE id = ?", (target_qid,)).fetchone()
+            q_row = db.execute("SELECT q.*, u.role as user_role FROM queries q JOIN users u ON q.user_id = u.id WHERE q.id = ?", (target_qid,)).fetchone()
             if q_row:
+                q_dict = dict(q_row)
+                default_sender = 'Faculty (Submitter)' if q_dict.get('user_role') in ['faculty', 'staff'] else 'Student (Submitter)'
+                sender_name = request.form.get('sender_name', '').strip() or default_sender
                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 cursor = db.cursor()
                 cursor.execute("""
                     INSERT INTO messages (query_id, sender_id, message, is_internal_note, created_at)
                     VALUES (?, ?, ?, 0, ?)
-                """, (target_qid, q_row['user_id'], reply_text, now_str))
+                """, (target_qid, q_dict['user_id'], reply_text, now_str))
                 msg_id = cursor.lastrowid
                 
                 # Attachment if any
@@ -795,15 +778,15 @@ def track_query():
                         cursor.execute("""
                             INSERT INTO attachments (query_id, message_id, filename, original_filename, file_size, file_type, filepath, uploaded_by)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (target_qid, msg_id, saved_filename, orig_filename, file_size, ext, save_path, q_row['user_id']))
+                        """, (target_qid, msg_id, saved_filename, orig_filename, file_size, ext, save_path, q_dict['user_id']))
                         cursor.execute("UPDATE messages SET attachment_filename = ?, attachment_path = ? WHERE id = ?", (orig_filename, saved_filename, msg_id))
                         
                 cursor.execute("UPDATE queries SET updated_at = ? WHERE id = ?", (now_str, target_qid))
                 db.commit()
                 
-                if q_row['assigned_staff_id']:
+                if q_dict.get('assigned_staff_id'):
                     create_notification(
-                        q_row['assigned_staff_id'],
+                        q_dict['assigned_staff_id'],
                         target_qid,
                         f"Student reply on Query #{target_qid}",
                         f"{sender_name}: {reply_text[:60]}...",
@@ -815,14 +798,15 @@ def track_query():
     if query_id_input:
         clean_id = ''.join(c for c in str(query_id_input) if c.isdigit())
         if clean_id:
-            query = db.execute("""
-                SELECT q.*, u.name as user_name, u.email as user_email, u.roll_no, u.level, u.course, u.year, u.department as user_dept
+            raw_query = db.execute("""
+                SELECT q.*, u.name as user_name, u.email as user_email, u.role as user_role, u.roll_no, u.level as user_level, u.course as user_course, u.year as user_year, u.department as user_dept, u.designation as user_designation
                 FROM queries q
                 JOIN users u ON q.user_id = u.id
                 WHERE q.id = ?
             """, (int(clean_id),)).fetchone()
             
-            if query:
+            if raw_query:
+                query = dict(raw_query)
                 messages = db.execute("""
                     SELECT m.*, u.name as sender_name, u.role as sender_role, u.department as sender_department, u.designation as sender_designation
                     FROM messages m
@@ -839,19 +823,21 @@ def track_query():
                     ORDER BY a.created_at ASC
                 """, (query['id'],)).fetchall()
                 
-                if query['assigned_staff_id']:
-                    staff_resolver = db.execute("SELECT id, name, email, department, designation, phone, role, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
+                if query.get('assigned_staff_id'):
+                    staff_row = db.execute("SELECT id, name, email, department, designation, phone, role, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
+                    staff_resolver = dict(staff_row) if staff_row else None
                 
-                query_course = query['course'] if ('course' in query.keys() and query['course']) else None
+                query_course = query.get('course')
                 if query_course:
-                    hod_resolver = db.execute("""
+                    hod_row = db.execute("""
                         SELECT id, name, email, department, designation, role, last_active_at 
                         FROM users 
                         WHERE role = 'hod' AND department = ? AND (course = ? OR course IS NULL)
                         ORDER BY (CASE WHEN course = ? THEN 1 ELSE 2 END) LIMIT 1
                     """, (query['department'], query_course, query_course)).fetchone()
                 else:
-                    hod_resolver = db.execute("SELECT id, name, email, department, designation, role, last_active_at FROM users WHERE role = 'hod' AND department = ? LIMIT 1", (query['department'],)).fetchone()
+                    hod_row = db.execute("SELECT id, name, email, department, designation, role, last_active_at FROM users WHERE role = 'hod' AND department = ? LIMIT 1", (query['department'],)).fetchone()
+                hod_resolver = dict(hod_row) if hod_row else None
                 
                 # Update submitter active status & mark online
                 now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -865,66 +851,74 @@ def track_query():
                     ONLINE_USERS[sub_id] = set()
                     
                 # 1. Submitter Presence
-                sub_row = db.execute("SELECT id, name, role, department, course, level, year, roll_no, last_active_at FROM users WHERE id = ?", (sub_id,)).fetchone()
+                sub_row = db.execute("SELECT id, name, role, department, course, level, year, roll_no, designation, last_active_at FROM users WHERE id = ?", (sub_id,)).fetchone()
+                sub_dict = dict(sub_row) if sub_row else {}
+                is_fac = (sub_dict.get('role') in ['faculty', 'staff']) or (query.get('user_role') in ['faculty', 'staff'])
                 sub_role_display = 'Student'
-                if sub_row:
-                    if sub_row['role'] == 'student':
-                        c_info = f"{sub_row['course'] or query['course'] or 'UG'} {sub_row['department'] or query['department'] or ''}".strip()
-                        y_info = f" - Yr {sub_row['year'] or query['year']}" if (sub_row['year'] or query['year']) else ""
+                if sub_dict:
+                    if is_fac:
+                        desig_str = sub_dict.get('designation') or query.get('user_designation') or 'Faculty'
+                        prog_str = f"{query.get('course') or sub_dict.get('course') or ''} {sub_dict.get('department') or query.get('department') or ''}".strip()
+                        sub_role_display = f"{desig_str} ({prog_str})".strip()
+                    elif sub_dict.get('role') == 'student':
+                        c_info = f"{sub_dict.get('course') or query.get('course') or 'UG'} {sub_dict.get('department') or query.get('department') or ''}".strip()
+                        y_info = f" - Yr {sub_dict.get('year') or query.get('year')}" if (sub_dict.get('year') or query.get('year')) else ""
                         sub_role_display = f"Student ({c_info}{y_info})"
-                    elif sub_row['role'] in ['faculty', 'staff']:
-                        sub_role_display = f"Faculty ({sub_row['department'] or query['department'] or ''})"
                     else:
-                        sub_role_display = sub_row['role'].capitalize()
+                        sub_role_display = sub_dict.get('role', '').capitalize()
+                elif is_fac:
+                    sub_role_display = f"Faculty ({query.get('department') or ''})"
                         
                 submitter_presence = {
-                    'id': sub_row['id'] if sub_row else sub_id,
-                    'name': sub_row['name'] if sub_row else 'Student Submitter',
+                    'id': sub_dict.get('id', sub_id),
+                    'name': sub_dict.get('name') or ('Faculty Member' if is_fac else 'Student Submitter'),
                     'role': sub_role_display,
-                    'is_student': (sub_row['role'] == 'student') if sub_row else True,
-                    'is_faculty': (sub_row['role'] in ['faculty', 'staff']) if sub_row else False,
-                    'department': sub_row['department'] if (sub_row and sub_row['department']) else query['department'],
-                    'course': sub_row['course'] if (sub_row and sub_row['course']) else (query['course'] if 'course' in query.keys() else None),
-                    'year': sub_row['year'] if (sub_row and sub_row['year']) else (query['year'] if 'year' in query.keys() else None),
-                    'roll_no': sub_row['roll_no'] if (sub_row and sub_row['roll_no']) else (query['roll_no'] if 'roll_no' in query.keys() else None),
+                    'is_student': not is_fac,
+                    'is_faculty': is_fac,
+                    'department': sub_dict.get('department') or query.get('department'),
+                    'course': sub_dict.get('course') or query.get('course'),
+                    'year': sub_dict.get('year') or query.get('year'),
+                    'roll_no': sub_dict.get('roll_no') or query.get('roll_no'),
                     'is_online': True,
                     'last_active': 'Just now'
                 }
 
                 # 2. Governing Authority Presence (Academics -> HOD, Administrative -> AO, Others -> Principal)
                 authority_presence = None
-                q_cat = query['category']
+                q_cat = query.get('category', 'Academics')
                 if q_cat == 'Administrative':
                     ao_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'ao' ORDER BY id LIMIT 1").fetchone()
                     if ao_row:
-                        ao_online = ao_row['id'] in ONLINE_USERS
+                        ao_dict = dict(ao_row)
+                        ao_online = ao_dict['id'] in ONLINE_USERS
                         authority_presence = {
-                            'id': ao_row['id'],
-                            'name': ao_row['name'],
-                            'email': ao_row['email'],
+                            'id': ao_dict['id'],
+                            'name': ao_dict['name'],
+                            'email': ao_dict['email'],
                             'role_type': 'ao',
                             'role_title': 'Administrative Officer (AO)',
                             'icon': '🏢',
                             'department': 'Administrative Wing',
-                            'designation': ao_row['designation'] or 'Administrative Officer',
+                            'designation': ao_dict.get('designation') or 'Administrative Officer',
                             'is_online': ao_online,
-                            'last_active': 'Just now' if ao_online else ao_row['last_active_at']
+                            'last_active': 'Just now' if ao_online else ao_dict.get('last_active_at')
                         }
                 elif q_cat == 'Others':
                     prin_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'principal' ORDER BY id LIMIT 1").fetchone()
                     if prin_row:
-                        prin_online = prin_row['id'] in ONLINE_USERS
+                        prin_dict = dict(prin_row)
+                        prin_online = prin_dict['id'] in ONLINE_USERS
                         authority_presence = {
-                            'id': prin_row['id'],
-                            'name': prin_row['name'],
-                            'email': prin_row['email'],
+                            'id': prin_dict['id'],
+                            'name': prin_dict['name'],
+                            'email': prin_dict['email'],
                             'role_type': 'principal',
                             'role_title': 'Principal Executive Desk',
                             'icon': '🏛️',
                             'department': 'College Leadership',
-                            'designation': prin_row['designation'] or 'Principal',
+                            'designation': prin_dict.get('designation') or 'Principal',
                             'is_online': prin_online,
-                            'last_active': 'Just now' if prin_online else prin_row['last_active_at']
+                            'last_active': 'Just now' if prin_online else prin_dict.get('last_active_at')
                         }
                 else: # Academics
                     if hod_resolver:
@@ -936,38 +930,42 @@ def track_query():
                             'role_type': 'hod',
                             'role_title': f"{query_course or ''} Branch HOD".strip(),
                             'icon': '🎓',
-                            'department': hod_resolver['department'] or query['department'],
-                            'designation': hod_resolver['designation'] or 'Head of Department',
+                            'department': hod_resolver.get('department') or query.get('department'),
+                            'designation': hod_resolver.get('designation') or 'Head of Department',
                             'is_online': hod_online,
-                            'last_active': 'Just now' if hod_online else hod_resolver['last_active_at']
+                            'last_active': 'Just now' if hod_online else hod_resolver.get('last_active_at')
                         }
 
                 # 3. Staff Resolver Presence
                 staff_presence = None
                 if staff_resolver:
                     staff_online = staff_resolver['id'] in ONLINE_USERS
-                    if staff_resolver['role'] == 'hod':
+                    if staff_resolver.get('role') == 'hod':
                         role_label = 'Assigned Head of Dept (HOD)'
-                        desig_label = staff_resolver['designation'] or 'Head of Department'
-                    elif staff_resolver['role'] == 'office_staff':
+                        desig_label = staff_resolver.get('designation') or 'Head of Department'
+                    elif staff_resolver.get('role') == 'office_staff':
                         role_label = 'Office Staff Resolver'
-                        desig_label = staff_resolver['designation'] or 'Office Staff'
+                        desig_label = staff_resolver.get('designation') or 'Office Staff'
                     else:
                         role_label = 'Assigned Staff Resolver'
-                        desig_label = staff_resolver['designation'] or 'Department Staff'
+                        desig_label = staff_resolver.get('designation') or 'Department Staff'
 
                     staff_presence = {
                         'id': staff_resolver['id'],
                         'name': staff_resolver['name'],
                         'role': role_label,
-                        'role_type': staff_resolver['role'],
-                        'department': staff_resolver['department'] or query['department'],
+                        'role_type': staff_resolver.get('role'),
+                        'department': staff_resolver.get('department') or query.get('department'),
                         'designation': desig_label,
                         'is_online': staff_online,
-                        'last_active': 'Just now' if staff_online else staff_resolver['last_active_at']
+                        'last_active': 'Just now' if staff_online else staff_resolver.get('last_active_at')
                     }
             else:
+                query = None
                 flash(f'No query found with ID #{query_id_input}. Please verify your Query ID and try again.', 'warning')
+        else:
+            query = None
+            flash(f'Invalid Query ID "{query_id_input}". Please enter a valid numeric ID (e.g. 1042).', 'warning')
                 
     return render_template(
         'track_query.html',
@@ -990,6 +988,7 @@ def query_details(query_id):
     
     query = db.execute("""
         SELECT q.*, u.name as user_name, u.email as user_email, u.role as user_role, u.roll_no, u.phone,
+               u.designation as user_designation, u.level as user_level, u.course as user_course,
                staff.name as staff_name, staff.email as staff_email, staff.department as staff_department,
                staff.designation as staff_designation, staff.phone as staff_phone
         FROM queries q
@@ -1112,7 +1111,9 @@ def query_details(query_id):
             y_info = f" - Yr {sub_row['year'] or query['year']}" if (sub_row['year'] or query['year']) else ""
             sub_role_display = f"Student ({c_info}{y_info})"
         elif sub_row['role'] in ['faculty', 'staff']:
-            sub_role_display = f"Faculty ({sub_row['department'] or query['department'] or ''})"
+            desig_txt = (sub_row['designation'] if 'designation' in sub_row.keys() and sub_row['designation'] else None) or 'Faculty'
+            prog_txt = f"{query['course'] or sub_row['course'] or ''} {sub_row['department'] or query['department'] or ''}".strip()
+            sub_role_display = f"{desig_txt} ({prog_txt})".strip()
         else:
             sub_role_display = sub_row['role'].capitalize()
             

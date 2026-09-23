@@ -50,6 +50,15 @@
             {% elif query.category == 'Administrative' %}🏢 Administrative
             {% else %}🔧 Campus Support (Others){% endif %}
           </span>
+          {% if (submitter_presence and submitter_presence.is_faculty) or (query.user_role in ['faculty', 'staff']) %}
+          <span class="badge" style="background: #f0fdf4; color: #15803d; border: 1.5px solid #86efac; font-weight: 800; font-size: 0.82rem; padding: 3px 9px;">
+            👩‍🏫 Faculty Query
+          </span>
+          {% else %}
+          <span class="badge" style="background: #f8fafc; color: #475569; border: 1.5px solid #cbd5e1; font-weight: 800; font-size: 0.82rem; padding: 3px 9px;">
+            👨‍🎓 Student Query
+          </span>
+          {% endif %}
           <span class="badge badge-{{ (query.priority or 'Medium') | lower }}">
             {{ query.priority or 'Medium' }} Priority
           </span>
@@ -61,12 +70,17 @@
           {{ query.title }}
         </h2>
         <div style="font-size: 0.82rem; color: #475569; margin-top: 4px;">
-          📅 Submitted on {{ query.created_at | format_datetime }} • 🏛️ Routed Desk: <strong>{% if query.category == 'Academics' %}🎓 {{ query.department }} HOD{% elif query.category == 'Administrative' %}🏢 Administrative Officer (AO){% else %}🏛️ Principal Desk{% endif %}</strong>
+          📅 Submitted on {{ query.created_at | format_datetime }} • 🏛️ Routed Desk: <strong>{% if query.category == 'Academics' %}🎓 {{ (query.course ~ ' ') if query.course else '' }}{{ query.department }} HOD{% elif query.category == 'Administrative' %}🏢 Administrative Officer (AO){% else %}🏛️ Principal Desk{% endif %}</strong>
         </div>
       </div>
 
       <!-- Quick Action Buttons -->
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        {% if current_user and current_user.role in ['staff', 'office_staff', 'faculty', 'hod', 'ao', 'principal', 'admin'] %}
+        <a href="{{ url_for('query_details', query_id=query.id) }}" class="btn btn-primary btn-sm" style="font-weight: 800; display: inline-flex; align-items: center; gap: 0.35rem; box-shadow: var(--shadow-xs);">
+          🏢 Open in Resolution Desk
+        </a>
+        {% endif %}
         <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" style="font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem;">
           🏠 Back to Home
         </a>
@@ -133,20 +147,34 @@
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem;">
         
-        <!-- 1. Submitter Status (Student - You) -->
+        <!-- 1. Submitter Status (Student or Faculty - You) -->
         <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 0.65rem 0.85rem; display: flex; align-items: center; gap: 0.65rem;">
           <div style="position: relative; flex-shrink: 0;">
-            <div style="width: 36px; height: 36px; border-radius: 50%; background: {% if submitter_presence and submitter_presence.is_faculty %}#16a34a{% else %}#4f46e5{% endif %}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem;">
-              {% if submitter_presence and submitter_presence.is_faculty %}👩‍🏫{% else %}👨‍🎓{% endif %}
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: {% if (submitter_presence and submitter_presence.is_faculty) or (query.user_role in ['faculty', 'staff']) %}#16a34a{% else %}#4f46e5{% endif %}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem;">
+              {% if (submitter_presence and submitter_presence.is_faculty) or (query.user_role in ['faculty', 'staff']) %}👩‍🏫{% else %}👨‍🎓{% endif %}
             </div>
             <span class="user-presence-dot" data-user-id="{{ submitter_presence.id if submitter_presence else query.user_id }}" style="position: absolute; bottom: -1px; right: -1px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: #16a34a;"></span>
           </div>
           <div style="overflow: hidden; flex-grow: 1;">
             <div style="font-size: 0.72rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">
-              {{ submitter_presence.role if submitter_presence else 'Student Submitter (You)' }}
+              {% if submitter_presence and submitter_presence.role %}
+                {{ submitter_presence.role }}
+              {% elif query.user_role in ['faculty', 'staff'] %}
+                Faculty Submitter (You)
+              {% else %}
+                Student Submitter (You)
+              {% endif %}
             </div>
             <div style="font-size: 0.86rem; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              {{ submitter_presence.name if submitter_presence else 'You (Student)' }}
+              {% if submitter_presence and submitter_presence.name %}
+                {{ submitter_presence.name }}
+              {% elif query.user_name %}
+                {{ query.user_name }}
+              {% elif query.user_role in ['faculty', 'staff'] %}
+                You (Faculty)
+              {% else %}
+                You (Student)
+              {% endif %}
             </div>
             <div class="user-presence-text" data-user-id="{{ submitter_presence.id if submitter_presence else query.user_id }}" style="font-size: 0.72rem; color: #16a34a; font-weight: 700;">
               🟢 Online Now (Active)
@@ -244,7 +272,11 @@
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.35rem; font-size: 0.75rem; color: #64748b;">
               <strong>
                 {% if msg.sender_id == query.user_id %}
-                  👨‍🎓 Student (You)
+                  {% if (submitter_presence and submitter_presence.is_faculty) or (query.user_role in ['faculty', 'staff']) or (msg.sender_role in ['faculty', 'staff']) %}
+                    👩‍🏫 Faculty (You)
+                  {% else %}
+                    👨‍🎓 Student (You)
+                  {% endif %}
                 {% else %}
                   👤 {{ msg.sender_name }} ({{ msg.sender_designation or msg.sender_role.capitalize() }})
                 {% endif %}
@@ -267,11 +299,12 @@
       {% endif %}
     </div>
 
-    <!-- Student Reply Box -->
+    <!-- Submitter Reply Box -->
     <form method="POST" action="{{ url_for('track_query') }}" enctype="multipart/form-data" style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
       <input type="hidden" name="action" value="send_reply">
       <input type="hidden" name="target_query_id" value="{{ query.id }}">
       <input type="hidden" name="query_id" value="{{ query.id }}">
+      <input type="hidden" name="sender_name" value="{% if (submitter_presence and submitter_presence.is_faculty) or (query.user_role in ['faculty', 'staff']) %}Faculty (Submitter){% else %}Student (Submitter){% endif %}">
 
       <div class="form-group" style="margin-bottom: 0.75rem;">
         <label for="replyMessage" class="form-label" style="font-weight: 700; font-size: 0.85rem;">
@@ -290,6 +323,36 @@
       </div>
     </form>
 
+  </div>
+  {% elif query_id_input %}
+  <!-- Dedicated No Query Found Card -->
+  <div class="card" style="padding: 2.75rem 1.5rem; text-align: center; background: #ffffff; border: 2px dashed #fca5a5; border-radius: var(--radius-md); margin-bottom: 2rem; box-shadow: var(--shadow-sm);">
+    <div style="font-size: 3.5rem; margin-bottom: 0.75rem;">🔍❌</div>
+    <h2 style="font-size: 1.35rem; font-weight: 800; color: #991b1b; margin-bottom: 0.5rem;">
+      No Query Found for ID #{{ query_id_input }}
+    </h2>
+    <p style="font-size: 0.95rem; color: #64748b; max-width: 520px; margin: 0 auto 1.5rem; line-height: 1.6;">
+      No registered query matches ID <strong>#{{ query_id_input }}</strong>. The query may not exist, or the ID number may have been entered incorrectly.
+    </p>
+    <div style="display: flex; justify-content: center; gap: 0.85rem; flex-wrap: wrap;">
+      <a href="{{ url_for('track_query') }}" class="btn btn-secondary" style="font-weight: 700; padding: 0.6rem 1.25rem;">
+        🔄 Search Another ID
+      </a>
+      <a href="{{ url_for('submit_query') }}" class="btn btn-primary" style="font-weight: 800; padding: 0.6rem 1.35rem;">
+        ✍️ Submit New Query
+      </a>
+    </div>
+  </div>
+  {% else %}
+  <!-- Initial Landing Info Card -->
+  <div class="card" style="padding: 2.25rem 1.5rem; text-align: center; background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: var(--radius-md); margin-bottom: 2rem;">
+    <div style="font-size: 2.75rem; margin-bottom: 0.6rem;">🎫</div>
+    <h3 style="font-size: 1.2rem; font-weight: 800; color: #334155; margin-bottom: 0.4rem;">
+      Ready to Track Query Status
+    </h3>
+    <p style="font-size: 0.9rem; color: #64748b; max-width: 480px; margin: 0 auto; line-height: 1.5;">
+      Enter the Query ID you received after ticket submission in the search box above to inspect its real-time resolution progress, assigned department desk, and live conversation.
+    </p>
   </div>
   {% endif %}
 

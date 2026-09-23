@@ -103,29 +103,64 @@
         </div>
       </div>
 
-      <!-- ================= 2. FACULTY DEPARTMENT ONLY SECTION ================= -->
+      <!-- ================= 2. FACULTY ACADEMIC & PROGRAM SECTION ================= -->
       <div id="facultyDepartmentSection" style="display: none; background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem;">
-        <div style="font-size: 0.82rem; font-weight: 800; color: #166534; text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;">
-          <span>🏢</span> Department / Wing Selection
+        <div style="font-size: 0.82rem; font-weight: 800; color: #166534; text-transform: uppercase; margin-bottom: 0.85rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+          <span style="display: flex; align-items: center; gap: 0.4rem;">
+            <span>👩‍🏫</span> Faculty Academic Program & Department Details
+          </span>
+          <span class="badge" style="background: #dcfce7; color: #15803d; font-weight: 800; font-size: 0.75rem; border: 1px solid #86efac;">
+            Teaching & Department Desk
+          </span>
         </div>
 
-        <div class="form-group" style="margin-bottom: 0;">
-          <label for="facDeptSelect" class="form-label" style="font-weight: 700; font-size: 0.88rem;">Select Department *</label>
-          <select id="facDeptSelect" name="faculty_department" class="form-control" onchange="onDepartmentChanged()" style="font-size: 0.95rem; font-weight: 600; padding: 0.75rem 0.85rem; background: #ffffff;">
-            <option value="Computer Science & Engineering (CSE)" selected>Computer Science & Engineering (CSE)</option>
-            <option value="Information Technology (IT)">Information Technology (IT)</option>
-            <option value="Artificial Intelligence & Data Science (AI&DS)">Artificial Intelligence & Data Science (AI&DS)</option>
-            <option value="Artificial Intelligence & Machine Learning (AIML)">Artificial Intelligence & Machine Learning (AIML)</option>
-            <option value="Electronics & Communication Engineering (ECE)">Electronics & Communication Engineering (ECE)</option>
-            <option value="Electrical & Electronics Engineering (EEE)">Electrical & Electronics Engineering (EEE)</option>
-            <option value="Mechanical Engineering (Mech)">Mechanical Engineering (Mech)</option>
-            <option value="Civil Engineering (Civil)">Civil Engineering (Civil)</option>
-            <option value="Master of Computer Applications (MCA)">Master of Computer Applications (MCA)</option>
-            <option value="Master of Business Administration (MBA)">Master of Business Administration (MBA)</option>
-            <option value="Science & Humanities (S&H)">Science & Humanities (S&H)</option>
-            <option value="Administrative">Administrative Department</option>
-            <option value="Others">Others / Campus Facilities</option>
-          </select>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem;">
+          <!-- 1. Academic Level (UG / PG / Diploma) -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="facLevelSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700; color: #166534;">Academic Level *</label>
+            <select id="facLevelSelect" name="faculty_level" class="form-control" onchange="updateFacultyCourses()" style="font-size: 0.88rem; padding: 0.65rem 0.85rem; background: #ffffff;">
+              <option value="UG" selected>Undergraduate (UG)</option>
+              <option value="PG">Postgraduate (PG)</option>
+              <option value="Diploma">Polytechnic / Diploma</option>
+            </select>
+          </div>
+
+          <!-- 2. Program / Course -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="facCourseSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700; color: #166534;">Program / Course *</label>
+            <select id="facCourseSelect" name="faculty_course" class="form-control" onchange="updateFacultyDepts()" style="font-size: 0.88rem; padding: 0.65rem 0.85rem; background: #ffffff;">
+              <!-- Populated dynamically: B.Tech, Degree, M.Tech, MCA, MBA, etc. -->
+            </select>
+          </div>
+
+          <!-- 3. Department / Branch -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="facDeptSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700; color: #166534;">Department / Branch *</label>
+            <select id="facDeptSelect" name="faculty_department" class="form-control" onchange="onDepartmentChanged()" style="font-size: 0.88rem; padding: 0.65rem 0.85rem; font-weight: 600; background: #ffffff;">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <!-- 4. Faculty Designation / Teaching Role -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="facDesignationSelect" class="form-label" style="font-size: 0.82rem; font-weight: 700; color: #166534;">Faculty Designation</label>
+            <select id="facDesignationSelect" name="faculty_designation" class="form-control" style="font-size: 0.88rem; padding: 0.65rem 0.85rem; background: #ffffff;">
+              <option value="Assistant Professor" selected>Assistant Professor</option>
+              <option value="Associate Professor">Associate Professor</option>
+              <option value="Professor">Professor</option>
+              <option value="Head of Department (HOD)">Head of Department (HOD)</option>
+              <option value="Lab Assistant / Technician">Lab Assistant / Technician</option>
+              <option value="Faculty Member">Faculty Member (General)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Optional Faculty Employee ID -->
+        <div class="form-group" style="margin-top: 1rem; margin-bottom: 0;">
+          <label for="facIdInput" class="form-label" style="font-size: 0.82rem; font-weight: 700; color: #166534;">
+            Faculty Employee ID / Staff Code <span style="font-size: 0.72rem; color: #64748b; font-weight: normal;">(Optional)</span>
+          </label>
+          <input type="text" id="facIdInput" name="faculty_id" class="form-control" placeholder="e.g. FAC-CSE-104 (Optional)" style="font-size: 0.88rem; background: #ffffff;">
         </div>
       </div>
 
@@ -319,6 +354,47 @@ function updateStudentYears() {
   }
 }
 
+function updateFacultyCourses() {
+  const levelSelect = document.getElementById('facLevelSelect');
+  const courseSelect = document.getElementById('facCourseSelect');
+  if (!levelSelect || !courseSelect) return;
+
+  const level = levelSelect.value;
+  const levelData = studentHierarchy[level] || studentHierarchy['UG'];
+
+  courseSelect.innerHTML = '';
+  levelData.programs.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p;
+    courseSelect.appendChild(opt);
+  });
+
+  updateFacultyDepts();
+}
+
+function updateFacultyDepts() {
+  const levelSelect = document.getElementById('facLevelSelect');
+  const courseSelect = document.getElementById('facCourseSelect');
+  const deptSelect = document.getElementById('facDeptSelect');
+  if (!levelSelect || !courseSelect || !deptSelect) return;
+
+  const level = levelSelect.value;
+  const program = courseSelect.value;
+  const levelData = studentHierarchy[level] || studentHierarchy['UG'];
+  const depts = levelData.details[program] || levelData.details[levelData.programs[0]] || [];
+
+  deptSelect.innerHTML = '';
+  depts.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    deptSelect.appendChild(opt);
+  });
+
+  onDepartmentChanged();
+}
+
 // Switch between Student Query & Faculty Query
 function switchQueryMode(mode) {
   const tabStudentBtn = document.getElementById('tabStudentBtn');
@@ -417,8 +493,8 @@ function updateDestinationDisplay(category) {
 
   const currentDept = getSelectedDepartment();
   const queryType = document.getElementById('queryTypeInput') ? document.getElementById('queryTypeInput').value : 'student';
-  const courseSelect = document.getElementById('courseSelect');
-  const courseVal = (queryType === 'student' && courseSelect && courseSelect.value) ? courseSelect.value : '';
+  const courseSelect = (queryType === 'faculty') ? document.getElementById('facCourseSelect') : document.getElementById('courseSelect');
+  const courseVal = (courseSelect && courseSelect.value) ? courseSelect.value : '';
 
   if (category === 'Academics') {
     if (courseVal) {
@@ -505,6 +581,9 @@ document.addEventListener('DOMContentLoaded', function() {
   window.scrollTo(0, 0);
   const levelSelect = document.getElementById('levelSelect');
   const courseSelect = document.getElementById('courseSelect');
+  const facLevelSelect = document.getElementById('facLevelSelect');
+  const facCourseSelect = document.getElementById('facCourseSelect');
+  const facDeptSelect = document.getElementById('facDeptSelect');
   const titleInput = document.getElementById('queryTitle');
   const descInput = document.getElementById('queryDesc');
 
@@ -512,6 +591,15 @@ document.addEventListener('DOMContentLoaded', function() {
     levelSelect.addEventListener('change', updateStudentCourses);
     courseSelect.addEventListener('change', updateStudentDepts);
     updateStudentCourses();
+  }
+
+  if (facLevelSelect && facCourseSelect) {
+    facLevelSelect.addEventListener('change', updateFacultyCourses);
+    facCourseSelect.addEventListener('change', updateFacultyDepts);
+    if (facDeptSelect) {
+      facDeptSelect.addEventListener('change', onDepartmentChanged);
+    }
+    updateFacultyCourses();
   }
 
   if (titleInput) {
