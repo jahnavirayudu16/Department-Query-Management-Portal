@@ -22,7 +22,7 @@ app.config.from_object(Config)
 
 # Initialize Database Hooks & SocketIO
 init_app(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', ping_interval=15, ping_timeout=15, engineio_logger=False)
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -136,18 +136,21 @@ def inject_global_context():
     
     if user:
         db = get_db()
-        # Single query: fetch up to 5 latest unread + count in one shot
+        # Fetch up to 5 latest unread notifications (using composite index on user_id, is_read, created_at)
         notifications = db.execute(
             'SELECT * FROM notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5',
             (user['id'],)
         ).fetchall()
         unread_notifications = [dict(n) for n in notifications]
-        # Count comes from a lightweight separate query (SQLite COUNT on indexed column is O(1))
-        count_row = db.execute(
-            'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
-            (user['id'],)
-        ).fetchone()
-        unread_notifications_count = count_row['count'] if count_row else 0
+        # Fast path: if fewer than 5 returned, the length is the exact count without an extra DB query
+        if len(unread_notifications) < 5:
+            unread_notifications_count = len(unread_notifications)
+        else:
+            count_row = db.execute(
+                'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
+                (user['id'],)
+            ).fetchone()
+            unread_notifications_count = count_row['count'] if count_row else 5
         
     return {
         'current_user': user,
@@ -981,7 +984,10 @@ def track_query():
                 staff_presence = None
                 if staff_resolver:
                     staff_online = staff_resolver['id'] in ONLINE_USERS
-                    if staff_resolver.get('role') == 'hod':
+                    if staff_resolver.get('role') == 'principal':
+                        role_label = 'Principal (Direct Handling)'
+                        desig_label = staff_resolver.get('designation') or 'Principal'
+                    elif staff_resolver.get('role') == 'hod':
                         role_label = 'Assigned Head of Dept (HOD)'
                         desig_label = staff_resolver.get('designation') or 'Head of Department'
                     elif staff_resolver.get('role') == 'office_staff':
@@ -1209,44 +1215,30 @@ def query_details(query_id):
                 'last_active': 'Just now' if prin_online else prin_row['last_active_at']
             }
     else: # Academics
-        hod_row = None
-        target_dept = query['department'] or (sub_row['department'] if sub_row else None)
-        target_course = query['course'] if ('course' in query.keys() and query['course']) else (sub_row['course'] if sub_row and 'course' in sub_row.keys() else None)
+        q_dict = dict(query)
+        s_dict = dict(sub_row) if sub_row else {}
+        dept_val = q_dict.get('department') or s_dict.get('department') or ''
+        course_val = q_dict.get('course') or s_dict.get('course') or ''
+        target_course = course_val
         
-        if target_dept and target_course:
-            hod_row = db.execute("""
-                SELECT id, name, email, role, department, designation, last_active_at 
-                FROM users 
-                WHERE role = 'hod' AND department = ? AND course = ?
-                ORDER BY id DESC LIMIT 1
-            """, (target_dept, target_course)).fetchone()
-            
-        if not hod_row and target_dept:
-            hod_row = db.execute("""
-                SELECT id, name, email, role, department, designation, last_active_at 
-                FROM users 
-                WHERE role = 'hod' AND department = ?
-                ORDER BY id DESC LIMIT 1
-            """, (target_dept,)).fetchone()
-            
-        if not hod_row and target_course:
-            hod_row = db.execute("""
-                SELECT id, name, email, role, department, designation, last_active_at 
-                FROM users 
-                WHERE role = 'hod' AND course = ?
-                ORDER BY id DESC LIMIT 1
-            """, (target_course,)).fetchone()
-            
-        if not hod_row and target_dept not in ['Academics', 'Administrative', 'Others']:
-            hod_row = db.execute("""
-                SELECT id, name, email, role, department, designation, last_active_at 
-                FROM users 
-                WHERE role = 'hod' AND (department LIKE ? OR ? LIKE '%' || department || '%')
-                ORDER BY id DESC LIMIT 1
-            """, (f"%{target_dept}%", target_dept)).fetchone()
-            
-        if not hod_row:
-            hod_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'hod' ORDER BY id LIMIT 1").fetchone()
+        # Single prioritized lookup: finds closest matching branch HOD with 1 indexed query instead of 5 sequential queries
+        hod_row = db.execute("""
+            SELECT id, name, email, role, department, designation, last_active_at 
+            FROM users 
+            WHERE role = 'hod' AND is_active = 1
+            ORDER BY 
+                CASE 
+                    WHEN ? != '' AND ? != '' AND department = ? AND course = ? THEN 1
+                    WHEN ? != '' AND department = ? THEN 2
+                    WHEN ? != '' AND course = ? THEN 3
+                    WHEN ? != '' AND (department LIKE ? OR ? LIKE '%' || department || '%') THEN 4
+                    ELSE 5
+                END ASC, id DESC
+            LIMIT 1
+        """, (dept_val, course_val, dept_val, course_val,
+              dept_val, dept_val,
+              course_val, course_val,
+              dept_val, f"%{dept_val}%", dept_val)).fetchone()
             
         if hod_row:
             hod_online = (hod_row['id'] in ONLINE_USERS) or (user and user['id'] == hod_row['id'])
@@ -1271,7 +1263,10 @@ def query_details(query_id):
         staff_row = db.execute("SELECT id, name, role, department, designation, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
         if staff_row:
             staff_online = (staff_row['id'] in ONLINE_USERS) or (user and user['id'] == staff_row['id'])
-            if staff_row['role'] == 'hod':
+            if staff_row['role'] == 'principal':
+                role_label = 'Principal (Direct Handling)'
+                desig_label = staff_row['designation'] or 'Principal'
+            elif staff_row['role'] == 'hod':
                 role_label = 'Assigned Head of Dept (HOD)'
                 desig_label = staff_row['designation'] or 'Head of Department'
             elif staff_row['role'] == 'office_staff':
@@ -1292,8 +1287,9 @@ def query_details(query_id):
                 'last_active': 'Just now' if staff_online else staff_row['last_active_at']
             }
 
-    # Flag if query is assigned to currently logged-in HOD
+    # Flag if query is assigned to currently logged-in HOD or Principal
     is_assigned_to_current_hod = bool(user and user['role'] == 'hod' and query['assigned_staff_id'] == user['id'])
+    is_assigned_to_current_principal = bool(user and user['role'] == 'principal' and query['assigned_staff_id'] == user['id'])
 
     # Complete lists of HODs and Staff Resolvers for Principal & Admin assignment selection
     all_hods = db.execute("""
@@ -1323,7 +1319,8 @@ def query_details(query_id):
         authority_presence=authority_presence,
         staff_presence=staff_presence,
         hod_presence=hod_presence,
-        is_assigned_to_current_hod=is_assigned_to_current_hod
+        is_assigned_to_current_hod=is_assigned_to_current_hod,
+        is_assigned_to_current_principal=is_assigned_to_current_principal
     )
 
 
@@ -1425,11 +1422,11 @@ def post_message(query_id):
                 )
         elif not is_internal_note:
             # Notify query owner
-            sender_role_label = 'HOD' if user['role'] == 'hod' else ('AO' if user['role'] == 'ao' else ('Office Staff' if user['role'] == 'office_staff' else 'Staff'))
+            sender_role_label = 'Principal' if user['role'] == 'principal' else ('HOD' if user['role'] == 'hod' else ('AO' if user['role'] == 'ao' else ('Office Staff' if user['role'] == 'office_staff' else 'Staff')))
             create_notification(
                 query['user_id'],
                 query_id,
-                f"Department reply on Query #{query_id}",
+                f"Leadership reply on Query #{query_id}" if user['role'] == 'principal' else f"Department reply on Query #{query_id}",
                 f"{user['name']} ({user['department'] or sender_role_label}): {message_text[:60]}...",
                 'message'
             )
@@ -1549,9 +1546,25 @@ def reassign_query(query_id):
     new_staff_id = request.form.get('assigned_staff_id')
     new_priority = request.form.get('priority')
     
-    # Quick Action: HOD or Staff takes the query directly
+    # Quick Action: Principal or HOD takes the query directly, or HOD escalates to Principal
     if action_type == 'take_query':
         new_staff_id = str(user['id'])
+    elif action_type == 'escalate_principal':
+        prin_row = db.execute("SELECT id, name, role FROM users WHERE role = 'principal' AND is_active = 1 ORDER BY id ASC LIMIT 1").fetchone()
+        if prin_row:
+            new_staff_id = str(prin_row['id'])
+
+    # Track previous handler for clear audit trails
+    prev_staff_id = query['assigned_staff_id']
+    prev_handler_name = "Unassigned"
+    if prev_staff_id:
+        prev_user = db.execute("SELECT id, name, role, designation FROM users WHERE id = ?", (prev_staff_id,)).fetchone()
+        if prev_user:
+            r_label = 'Principal' if prev_user['role'] == 'principal' else ('HOD' if prev_user['role'] == 'hod' else ('Staff' if prev_user['role'] == 'staff' else prev_user['role'].capitalize()))
+            if f"({r_label})" in prev_user['name'] or f"({prev_user['role'].upper()})" in prev_user['name']:
+                prev_handler_name = prev_user['name']
+            else:
+                prev_handler_name = f"{prev_user['name']} ({r_label})"
     
     cursor = db.cursor()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1582,7 +1595,12 @@ def reassign_query(query_id):
         staff_val = int(new_staff_id) if new_staff_id != "" and new_staff_id != "0" else None
         
         # Determine status update
-        new_status = 'In Progress' if (action_type == 'take_query' or (staff_val == user['id'] and user['role'] == 'hod')) else ('Assigned' if query['status'] == 'New' else query['status'])
+        if action_type in ['take_query', 'escalate_principal'] or (staff_val == user['id'] and user['role'] in ['hod', 'principal']):
+            new_status = 'In Progress'
+        elif query['status'] == 'New':
+            new_status = 'Assigned'
+        else:
+            new_status = query['status']
         
         cursor.execute("""
             UPDATE queries SET assigned_staff_id = ?, status = ?, updated_at = ? WHERE id = ?
@@ -1593,11 +1611,54 @@ def reassign_query(query_id):
             if assigned_target:
                 target_name = assigned_target['name']
                 target_role = assigned_target['role']
-                target_desig = assigned_target['designation'] or ('Head of Department' if target_role == 'hod' else 'Staff')
+                target_desig = assigned_target['designation'] or ('Principal' if target_role == 'principal' else ('Head of Department' if target_role == 'hod' else 'Staff'))
+                target_role_desc = 'Principal' if target_role == 'principal' else ('HOD' if target_role == 'hod' else target_desig)
+                if f"({target_role_desc})" in target_name or f"({target_role.upper()})" in target_name:
+                    new_handler_name = target_name
+                else:
+                    new_handler_name = f"{target_name} ({target_role_desc})"
                 
-                if staff_val == user['id'] and user['role'] == 'hod':
+                actor_role = 'Principal' if user['role'] == 'principal' else ('HOD' if user['role'] == 'hod' else user['role'].capitalize())
+                actor_desc = user['name'] if (f"({actor_role})" in user['name'] or f"({user['role'].upper()})" in user['name']) else f"{user['name']} ({actor_role})"
+                
+                if action_type == 'escalate_principal' or (user['role'] == 'hod' and target_role == 'principal'):
+                    # HOD escalates query to Principal
+                    log_details.append(f"Escalated to Principal by HOD {user['name']}. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Escalated by: {actor_desc}")
+                    create_notification(
+                        staff_val,
+                        query_id,
+                        '🔺 Query Escalated by HOD',
+                        f"HOD {user['name']} has escalated Query #{query_id} ('{query['title']}') to Principal Executive Desk for direct handling.",
+                        'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'
+                    )
+                    create_notification(
+                        query['user_id'],
+                        query_id,
+                        '🔺 Query Escalated to Principal',
+                        f"Your query #{query_id} has been escalated to Principal Executive Desk for direct review and resolution.",
+                        'info'
+                    )
+                elif staff_val == user['id'] and user['role'] == 'principal':
+                    # Principal self-assigns / takes ownership to resolve directly
+                    log_details.append(f"Principal {user['name']} took direct ownership to resolve directly. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Handled by: {actor_desc}")
+                    create_notification(
+                        query['user_id'],
+                        query_id,
+                        '🏛️ Query In Progress with Principal',
+                        f"Principal {user['name']} has taken your query #{query_id} to resolve directly.",
+                        'info'
+                    )
+                    if prev_staff_id and prev_staff_id != user['id']:
+                        create_notification(
+                            prev_staff_id,
+                            query_id,
+                            '🏛️ Query Taken by Principal',
+                            f"Principal {user['name']} has taken direct ownership of Query #{query_id}.",
+                            'info'
+                        )
+                elif staff_val == user['id'] and user['role'] == 'hod':
                     # HOD self-assigns / takes ownership to resolve directly
-                    log_details.append(f"HOD {user['name']} self-assigned query to resolve directly")
+                    log_details.append(f"HOD {user['name']} self-assigned query to resolve directly. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
                     create_notification(
                         query['user_id'],
                         query_id,
@@ -1605,15 +1666,23 @@ def reassign_query(query_id):
                         f"Department Head {user['name']} has taken your query #{query_id} to resolve directly.",
                         'info'
                     )
+                    if prev_staff_id and prev_staff_id != user['id']:
+                        create_notification(
+                            prev_staff_id,
+                            query_id,
+                            '🎓 Query Taken by HOD',
+                            f"Department Head {user['name']} has taken direct ownership of Query #{query_id}.",
+                            'info'
+                        )
                 elif user['role'] in ['principal', 'admin'] and target_role == 'hod':
-                    # Principal or Admin assigns query to HOD
-                    log_details.append(f"Assigned by Principal to HOD {target_name}")
+                    # Principal or Admin assigns/escalates query to HOD
+                    log_details.append(f"Assigned/Escalated by {user['role'].capitalize()} to HOD {target_name}. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
                     create_notification(
                         staff_val,
                         query_id,
-                        '🏛️ Query Assigned by Principal',
-                        f"Principal assigned Query #{query_id} to you: '{query['title']}'. You can resolve it directly or assign to department staff.",
-                        'urgent' if query['priority'] in ['Critical', 'High'] else 'info'
+                        '🏛️ Query Assigned by Principal' if user['role'] == 'principal' else 'Query Assigned by Admin',
+                        f"{user['role'].capitalize()} assigned Query #{query_id} to you: '{query['title']}'. You can resolve it directly or assign to department staff.",
+                        'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'
                     )
                     create_notification(
                         query['user_id'],
@@ -1624,13 +1693,13 @@ def reassign_query(query_id):
                     )
                 elif user['role'] == 'hod':
                     # HOD delegates to staff/faculty member
-                    log_details.append(f"Delegated by HOD {user['name']} to {target_name} ({target_desig})")
+                    log_details.append(f"Delegated by HOD {user['name']} to {target_name} ({target_desig}). Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Delegated by: {actor_desc}")
                     create_notification(
                         staff_val,
                         query_id,
                         '🎓 Query Assigned by HOD',
                         f"HOD {user['name']} assigned Query #{query_id} to you: '{query['title']}'.",
-                        'urgent' if query['priority'] in ['Critical', 'High'] else 'info'
+                        'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'
                     )
                     create_notification(
                         query['user_id'],
@@ -1640,7 +1709,7 @@ def reassign_query(query_id):
                         'info'
                     )
                 else:
-                    log_details.append(f"Assigned to {target_name} ({target_desig})")
+                    log_details.append(f"Assigned to {target_name} ({target_desig}). Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
                     create_notification(
                         staff_val,
                         query_id,
@@ -1656,7 +1725,9 @@ def reassign_query(query_id):
                         'info'
                     )
         else:
-            log_details.append("Unassigned staff resolver")
+            actor_role = 'Principal' if user['role'] == 'principal' else ('HOD' if user['role'] == 'hod' else user['role'].capitalize())
+            actor_desc = user['name'] if (f"({actor_role})" in user['name'] or f"({user['role'].upper()})" in user['name']) else f"{user['name']} ({actor_role})"
+            log_details.append(f"Unassigned staff resolver. Previous Handler: {prev_handler_name} -> New Handler: Unassigned; Action by: {actor_desc}")
 
     if log_details:
         cursor.execute("""
@@ -1813,6 +1884,7 @@ def department_dashboard():
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE assigned_staff_id = ? AND first_response_at IS NOT NULL
+            ORDER BY id DESC LIMIT 50
         """, (user['id'],)).fetchall()
     elif user['role'] == 'hod' and user.get('course'):
         hod_c = user['course']
@@ -1831,6 +1903,7 @@ def department_dashboard():
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND first_response_at IS NOT NULL
+            ORDER BY id DESC LIMIT 50
         """, (dept, dept, hod_c, user['id'])).fetchall()
     elif user['role'] == 'hod':
         s = db.execute("""
@@ -1848,6 +1921,7 @@ def department_dashboard():
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND first_response_at IS NOT NULL
+            ORDER BY id DESC LIMIT 50
         """, (dept, dept, user['id'])).fetchall()
     else:
         s = db.execute("""
@@ -1865,6 +1939,7 @@ def department_dashboard():
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND first_response_at IS NOT NULL
+            ORDER BY id DESC LIMIT 50
         """, (dept, dept, dept)).fetchall()
 
     
@@ -1977,8 +2052,28 @@ def department_dashboard():
         else:
             sql += " AND (q.department = 'Administrative' OR q.assigned_staff_id = ?)"
             params.append(user['id'])
+    elif user['role'] == 'principal':
+        if view_mode == 'assigned':
+            # Specifically queries handled directly by Principal
+            sql += " AND q.assigned_staff_id = ?"
+            params.append(user['id'])
+        elif view_mode == 'delegated':
+            # Queries delegated/assigned to HOD or Staff
+            sql += " AND q.assigned_staff_id IS NOT NULL AND q.assigned_staff_id != ?"
+            params.append(user['id'])
+            if dept and dept not in ['All', 'All Departments']:
+                sql += " AND q.department = ?"
+                params.append(dept)
+        elif view_mode in ['received', 'all', '']:
+            if dept and dept not in ['All', 'All Departments']:
+                sql += " AND q.department = ?"
+                params.append(dept)
+        else:
+            if dept and dept not in ['All', 'All Departments']:
+                sql += " AND q.department = ?"
+                params.append(dept)
     else:
-        # Principal / Central Admin see department queries
+        # Central Admin see department queries
         if dept and dept not in ['All', 'All Departments']:
             sql += " AND q.department = ?"
             params.append(dept)
@@ -2093,6 +2188,23 @@ def department_dashboard():
                 SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count
             FROM queries WHERE department = 'Administrative'
         """, (user['id'], user['id'])).fetchone()
+        total_dept_count = tc['total_dept_count'] or 0
+        assigned_count = tc['assigned_count'] or 0
+        delegated_count = tc['delegated_count'] or 0
+        unassigned_count = tc['unassigned_count'] or 0
+        unresolved_count = tc['unresolved_count'] or 0
+        resolved_count = tc['resolved_count'] or 0
+    elif user['role'] == 'principal':
+        tc = db.execute("""
+            SELECT
+                COUNT(*) as total_dept_count,
+                SUM(CASE WHEN assigned_staff_id = ? THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN assigned_staff_id IS NOT NULL AND assigned_staff_id != ? THEN 1 ELSE 0 END) as delegated_count,
+                SUM(CASE WHEN assigned_staff_id IS NULL AND status != 'Resolved' THEN 1 ELSE 0 END) as unassigned_count,
+                SUM(CASE WHEN status != 'Resolved' THEN 1 ELSE 0 END) as unresolved_count,
+                SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count
+            FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments')
+        """, (user['id'], user['id'], dept, dept, dept)).fetchone()
         total_dept_count = tc['total_dept_count'] or 0
         assigned_count = tc['assigned_count'] or 0
         delegated_count = tc['delegated_count'] or 0
@@ -2239,16 +2351,17 @@ def admin_dashboard():
 @role_required(['admin', 'principal'])
 def admin_communicate_hod():
     db = get_db()
+    user = get_current_user()
     
     # Query all active HODs with their academic hierarchy attributes
     hod_rows = db.execute("""
         SELECT u.id, u.name, u.email, u.level, u.course, u.department, u.designation, u.last_active_at,
-               (SELECT COUNT(*) FROM admin_hod_messages WHERE sender_id = u.id AND is_read = 0) as unread_count,
+               (SELECT COUNT(*) FROM admin_hod_messages WHERE sender_id = u.id AND receiver_id = ? AND is_read = 0) as unread_count,
                (SELECT COUNT(*) FROM queries WHERE department = u.department AND status != 'Resolved') as pending_queries
         FROM users u
         WHERE u.role = 'hod' AND u.is_active = 1
         ORDER BY u.level ASC, u.course ASC, u.name ASC
-    """).fetchall()
+    """, (user['id'],)).fetchall()
     
     hods = []
     for h in hod_rows:
@@ -2280,30 +2393,118 @@ def admin_hod_messages(hod_id):
     user = get_current_user()
     db = get_db()
     
-    # Permission verification
+    # Permission verification: HOD can only access their own endpoint
     if user['role'] == 'hod' and user['id'] != hod_id:
         return jsonify({'error': 'Unauthorized'}), 403
-        
-    admin_user = db.execute("SELECT id, name FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+
+    # Discover authorities in the system
+    admin_user = db.execute("SELECT id, name, role, designation FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY id LIMIT 1").fetchone()
+    principal_user = db.execute("SELECT id, name, role, designation FROM users WHERE role = 'principal' AND is_active = 1 ORDER BY id LIMIT 1").fetchone()
     admin_id = admin_user['id'] if admin_user else 1
+
+    available_partners = []
+    if principal_user:
+        available_partners.append({
+            'id': principal_user['id'],
+            'name': principal_user['name'],
+            'role': 'principal',
+            'label': '🏛️ Principal',
+            'desk_title': 'Principal Executive Desk',
+            'desk_subtitle': f"Direct channel with Principal ({principal_user['name']})"
+        })
+    if admin_user:
+        available_partners.append({
+            'id': admin_user['id'],
+            'name': admin_user['name'],
+            'role': 'admin',
+            'label': '⚡ Central Admin',
+            'desk_title': 'Central Administrator Desk',
+            'desk_subtitle': f"Direct channel with Central Admin ({admin_user['name']})"
+        })
+
+    # Determine the conversation partner (the other participant)
+    partner_id = None
+    if user['role'] in ['admin', 'principal']:
+        # For Admin or Principal, the conversation partner is always the specified HOD
+        partner_id = hod_id
+    else:
+        # User is HOD: identify the authority they are conversing with (Principal or Admin)
+        post_data = request.get_json(silent=True) or {}
+        explicit_partner = (
+            request.args.get('partner_id') or 
+            request.args.get('other_id') or 
+            request.args.get('receiver_id') or
+            request.args.get('with_user_id') or
+            post_data.get('partner_id') or
+            post_data.get('other_id') or
+            post_data.get('receiver_id') or
+            request.form.get('partner_id') or
+            request.form.get('other_id')
+        )
+        target_role = request.args.get('role') or post_data.get('role')
+
+        if explicit_partner:
+            try:
+                partner_id = int(explicit_partner)
+            except (ValueError, TypeError):
+                partner_id = None
+
+        if not partner_id and target_role:
+            if target_role == 'principal' and principal_user:
+                partner_id = principal_user['id']
+            elif target_role == 'admin' and admin_user:
+                partner_id = admin_user['id']
+
+        if not partner_id:
+            # 1. Prioritize unread messages for this HOD
+            unread_row = db.execute("""
+                SELECT sender_id FROM admin_hod_messages
+                WHERE receiver_id = ? AND is_read = 0
+                ORDER BY created_at DESC, id DESC LIMIT 1
+            """, (hod_id,)).fetchone()
+            if unread_row:
+                partner_id = unread_row['sender_id']
+
+        if not partner_id:
+            # 2. Check most recent message exchanged with this HOD
+            recent_row = db.execute("""
+                SELECT CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as other_id
+                FROM admin_hod_messages
+                WHERE sender_id = ? OR receiver_id = ?
+                ORDER BY created_at DESC, id DESC LIMIT 1
+            """, (hod_id, hod_id, hod_id)).fetchone()
+            if recent_row:
+                partner_id = recent_row['other_id']
+
+        if not partner_id:
+            # 3. Default to Principal if available, else Admin
+            if principal_user:
+                partner_id = principal_user['id']
+            elif admin_user:
+                partner_id = admin_user['id']
+            else:
+                partner_id = 1
+
+    partner_user = db.execute("SELECT id, name, role, department, designation FROM users WHERE id = ?", (partner_id,)).fetchone()
     
     if request.method == 'POST':
-        message_text = request.form.get('message', '').strip() or (request.get_json() or {}).get('message', '').strip()
+        post_data = request.get_json(silent=True) or {}
+        message_text = request.form.get('message', '').strip() or post_data.get('message', '').strip()
         if not message_text:
             return jsonify({'error': 'Message cannot be empty'}), 400
             
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         sender_id = user['id']
-        receiver_id = hod_id if user['role'] in ['admin', 'principal'] else admin_id
+        receiver_id = partner_id
         
         cursor = db.cursor()
         cursor.execute("""
             INSERT INTO admin_hod_messages (sender_id, receiver_id, department, message, is_read, created_at)
             VALUES (?, ?, ?, ?, 0, ?)
-        """, (sender_id, receiver_id, user['department'] or 'College Administration', message_text, now_str))
+        """, (sender_id, receiver_id, user.get('department') or 'College Administration', message_text, now_str))
         msg_id = cursor.lastrowid
         
-        # Send Notification
+        # Send Notification to recipient
         create_notification(
             receiver_id,
             None,
@@ -2316,26 +2517,32 @@ def admin_hod_messages(hod_id):
         msg_payload = {
             'id': msg_id,
             'sender_id': sender_id,
+            'receiver_id': receiver_id,
+            'hod_id': hod_id,
             'sender_name': user['name'],
             'sender_role': user['role'],
             'message': message_text,
             'created_at': now_str,
-            'timeago': 'Just now'
+            'timeago': 'Just now',
+            'is_me': True
         }
         
-        # Broadcast SocketIO
+        # Broadcast SocketIO to room
         socketio.emit('admin_hod_chat', msg_payload, room=f"admin_hod_{hod_id}")
         return jsonify({'status': 'success', 'message': msg_payload})
         
-    # GET: Mark received messages as read
+    # GET: Mark received messages from this specific partner as read
     try:
-        db.execute("UPDATE admin_hod_messages SET is_read = 1 WHERE receiver_id = ? AND sender_id = ?", (user['id'], hod_id if user['role'] in ['admin', 'principal'] else admin_id))
+        db.execute("""
+            UPDATE admin_hod_messages 
+            SET is_read = 1 
+            WHERE receiver_id = ? AND sender_id = ?
+        """, (user['id'], partner_id))
         db.commit()
     except Exception:
         pass
 
-    # GET: Fetch message history
-    curr_admin_id = user['id'] if user['role'] in ['admin', 'principal'] else admin_id
+    # GET: Fetch full message history between user and partner
     rows = db.execute("""
         SELECT m.*, u.name as sender_name, u.role as sender_role
         FROM admin_hod_messages m
@@ -2343,13 +2550,15 @@ def admin_hod_messages(hod_id):
         WHERE (m.sender_id = ? AND m.receiver_id = ?)
            OR (m.sender_id = ? AND m.receiver_id = ?)
         ORDER BY m.created_at ASC
-    """, (curr_admin_id, hod_id, hod_id, curr_admin_id)).fetchall()
+    """, (user['id'], partner_id, partner_id, user['id'])).fetchall()
     
     msg_list = []
     for r in rows:
         msg_list.append({
             'id': r['id'],
             'sender_id': r['sender_id'],
+            'receiver_id': r['receiver_id'],
+            'hod_id': hod_id,
             'sender_name': r['sender_name'],
             'sender_role': r['sender_role'],
             'message': r['message'],
@@ -2358,7 +2567,17 @@ def admin_hod_messages(hod_id):
             'is_me': (r['sender_id'] == user['id'])
         })
         
-    return jsonify({'messages': msg_list})
+    return jsonify({
+        'status': 'success',
+        'messages': msg_list,
+        'partner': {
+            'id': partner_user['id'],
+            'name': partner_user['name'],
+            'role': partner_user['role'],
+            'designation': partner_user['designation'] or partner_user['role'].capitalize()
+        } if partner_user else None,
+        'available_partners': available_partners
+    })
 
 @app.route('/admin/users', methods=['GET', 'POST'])
 @login_required

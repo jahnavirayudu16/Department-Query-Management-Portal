@@ -89,6 +89,19 @@ function initSocketGlobal() {
   const userDept = document.body.dataset.userDept;
   const userId = document.body.dataset.userId;
 
+  // Unauthenticated guests do not need real-time socket connections
+  if (!userId) return;
+
+  if (!window.dqmSocket) {
+    window.dqmSocket = io({
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      timeout: 10000
+    });
+  }
+  const socket = window.dqmSocket;
+
   // Emit heartbeat presence if logged in
   if (userId) {
     const emitPresence = () => {
@@ -97,8 +110,8 @@ function initSocketGlobal() {
 
     socket.on('connect', emitPresence);
     emitPresence();
-    // Heartbeat every 25 seconds
-    setInterval(emitPresence, 25000);
+    // Heartbeat every 45 seconds (lightweight, avoids connection spam)
+    setInterval(emitPresence, 45000);
   }
 
   // Listen for global presence updates on any page

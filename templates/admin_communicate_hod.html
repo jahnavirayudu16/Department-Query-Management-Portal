@@ -308,6 +308,8 @@ let currentLevelFilter = 'ALL';
 let currentProgramFilter = 'ALL';
 let currentBranchFilter = 'ALL';
 let adminHodSocket = null;
+const currentUserId = {{ current_user.id }};
+const currentUserRole = "{{ current_user.role }}";
 
 document.addEventListener('DOMContentLoaded', () => {
   initSocketConnection();
@@ -337,10 +339,14 @@ function initSocketConnection() {
 
   // Listen for incoming messages on active room
   adminHodSocket.on('admin_hod_chat', (msg) => {
-    if (msg.sender_id === currentSelectedHodId || (msg.is_me && currentSelectedHodId)) {
+    if (!currentSelectedHodId) return;
+    const isRelatedToSelectedHod = (msg.hod_id === currentSelectedHodId || msg.sender_id === currentSelectedHodId || msg.receiver_id === currentSelectedHodId);
+    const isForMe = (msg.receiver_id === currentUserId || msg.sender_id === currentUserId);
+    if (isRelatedToSelectedHod && isForMe) {
       appendChatMessage(msg);
     }
   });
+
 
   // Listen for live presence updates
   adminHodSocket.on('presence_update', (data) => {
@@ -566,11 +572,15 @@ function loadChatHistory(hodId) {
   stream.innerHTML = '<div style="margin: auto; text-align: center; color: var(--text-muted);">⏳ Loading message history...</div>';
 
   fetch(`/api/admin-hod-messages/${hodId}`)
-    .then(res => res.json())
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      return res.json();
+    })
     .then(data => {
       renderChatMessages(data.messages || []);
     })
     .catch(err => {
+      console.error('Error loading chat history:', err);
       stream.innerHTML = '<div style="margin: auto; text-align: center; color: #ef4444;">Failed to load conversation history.</div>';
     });
 }
@@ -603,20 +613,24 @@ function appendChatMessage(msg, scroll = true) {
   const stream = document.getElementById('hodChatStream');
   
   // Clear placeholder if present
-  if (stream.children.length === 1 && (stream.children[0].textContent.includes('No message history') || stream.children[0].textContent.includes('Central Admin Direct HOD Desk'))) {
+  if (stream.children.length === 1 && (stream.children[0].textContent.includes('No message history') || stream.children[0].textContent.includes('Central Admin Direct HOD Desk') || stream.children[0].textContent.includes('Loading message history'))) {
     stream.innerHTML = '';
   }
 
-  const isMe = msg.is_me !== undefined ? msg.is_me : (msg.sender_role === 'admin');
+  const isMe = msg.is_me !== undefined ? msg.is_me : (msg.sender_id === currentUserId);
   const msgEl = document.createElement('div');
   msgEl.style.display = 'flex';
   msgEl.style.flexDirection = 'column';
   msgEl.style.alignItems = isMe ? 'flex-end' : 'flex-start';
   msgEl.style.marginBottom = '0.5rem';
 
+  const myLabel = currentUserRole === 'principal' ? 'You (Principal)' : 'You (Central Admin)';
+  const senderRoleBadge = msg.sender_role === 'hod' ? ' (HOD)' : (msg.sender_role === 'principal' ? ' (Principal)' : ' (Central Admin)');
+  const senderLabel = isMe ? myLabel : (msg.sender_name || 'HOD') + senderRoleBadge;
+
   msgEl.innerHTML = `
     <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 2px;">
-      ${isMe ? 'You (Central Admin)' : (msg.sender_name || 'HOD')}
+      ${senderLabel}
     </div>
     <div class="admin-msg-bubble" style="${isMe ? 'background: linear-gradient(135deg, #4338ca, #4f46e5); color: #ffffff; border-bottom-right-radius: 2px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);' : 'background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);'}">
       ${escapeHtml(msg.message)}
@@ -631,6 +645,7 @@ function appendChatMessage(msg, scroll = true) {
     stream.scrollTop = stream.scrollHeight;
   }
 }
+
 
 /* Send Message Form Handler */
 function sendAdminHodMessage(e) {

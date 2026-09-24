@@ -78,7 +78,7 @@
             📊 Branch Analytics Pie Charts
           </a>
           <button type="button" onclick="openHodAdminChat()" class="btn btn-secondary btn-sm" style="background: #ffffff; color: var(--primary); font-weight: 700;">
-            💬 Chat with Central Admin
+            💬 Chat with Principal / Admin
           </button>
         {% elif current_user.role == 'admin' %}
           <form method="GET" action="{{ url_for('department_dashboard') }}" style="display: flex; gap: 0.5rem; align-items: center;">
@@ -170,7 +170,14 @@
       <a href="{{ url_for('department_dashboard', dept=dept, view='assigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'assigned' or not current_view %}background: #4f46e5; color: #fff; border: none;{% else %}background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;{% endif %} padding: 0.45rem 0.9rem;">
         📌 Assigned Queries ({{ assigned_count }})
       </a>
-      {% elif current_user.role in ['ao', 'principal', 'admin'] %}
+      {% elif current_user.role == 'principal' %}
+      <a href="{{ url_for('department_dashboard', dept=dept, view='assigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'assigned' %}background: #9d174d; color: #fff; border: none;{% else %}background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8;{% endif %} padding: 0.45rem 0.9rem;">
+        🏛️ Handled by Principal ({{ assigned_count }})
+      </a>
+      <a href="{{ url_for('department_dashboard', dept=dept, view='delegated') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'delegated' %}background: #0284c7; color: #fff; border: none;{% else %}background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd;{% endif %} padding: 0.45rem 0.9rem;">
+        🎓 Assigned to HOD / Staff ({{ delegated_count }})
+      </a>
+      {% elif current_user.role in ['ao', 'admin'] %}
       <a href="{{ url_for('department_dashboard', dept=dept, view='assigned') }}" class="btn btn-sm" style="font-weight: 800; {% if current_view == 'assigned' %}background: #4f46e5; color: #fff; border: none;{% else %}background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe;{% endif %} padding: 0.45rem 0.9rem;">
         📌 Assigned Queries ({{ assigned_count }})
       </a>
@@ -307,9 +314,17 @@
                   {% else %}
                     Open & Manage →
                   {% endif %}
+                {% elif current_user.role == 'principal' %}
+                  {% if q.assigned_staff_id == current_user.id %}
+                    ⚡ Solve / Direct Desk →
+                  {% elif not q.assigned_staff_id %}
+                    ⚡ Solve / Assign Desk →
+                  {% else %}
+                    Open & Manage →
+                  {% endif %}
                 {% elif current_user.role == 'ao' and not q.assigned_staff_id %}
                   Assign Office Staff →
-                {% elif current_user.role in ['principal', 'admin'] and not q.assigned_staff_id %}
+                {% elif current_user.role == 'admin' and not q.assigned_staff_id %}
                   Assign Staff & Reply →
                 {% else %}
                   Open & Reply →
@@ -340,22 +355,22 @@
 </div>
 
 {% if current_user.role == 'hod' %}
-<!-- HOD <-> CENTRAL ADMIN DIRECT CHAT MODAL -->
+<!-- HOD <-> PRINCIPAL / ADMIN DIRECT CHAT MODAL -->
 <div id="hodAdminChatModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 9999; backdrop-filter: blur(4px); align-items: center; justify-content: center; padding: 1rem;">
   <div style="background: #ffffff; width: 100%; max-width: 580px; height: 600px; border-radius: var(--radius-lg); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden; animation: modalFadeIn 0.2s ease-out;">
     
     <!-- Modal Header -->
     <div style="padding: 1rem 1.25rem; background: linear-gradient(135deg, #1e1b4b, #4338ca); color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <div style="width: 38px; height: 38px; border-radius: 50%; background: #ffffff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 800;">
+        <div id="hodChatModalIcon" style="width: 38px; height: 38px; border-radius: 50%; background: #ffffff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 800;">
           ⚡
         </div>
         <div>
-          <h4 style="font-size: 1.05rem; font-weight: 800; margin: 0; color: #ffffff;">
-            Central Administrator Desk
+          <h4 id="hodChatModalTitle" style="font-size: 1.05rem; font-weight: 800; margin: 0; color: #ffffff;">
+            Management Direct Desk
           </h4>
-          <div style="font-size: 0.75rem; color: #c7d2fe;">
-            Direct channel with Central Admin
+          <div id="hodChatModalSubtitle" style="font-size: 0.75rem; color: #c7d2fe;">
+            Direct channel with Principal / Admin
           </div>
         </div>
       </div>
@@ -363,6 +378,12 @@
       <button type="button" onclick="closeHodAdminChat()" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center;">
         ✕
       </button>
+    </div>
+
+    <!-- Partner Switcher Bar (Principal vs Central Admin) -->
+    <div id="hodChatPartnerTabs" style="display: none; background: #e0e7ff; padding: 0.5rem 1rem; border-bottom: 1px solid #c7d2fe; gap: 0.5rem; align-items: center;">
+      <span style="font-size: 0.72rem; font-weight: 800; color: #3730a3; text-transform: uppercase;">Desk Channel:</span>
+      <div id="hodChatPartnerPills" style="display: flex; gap: 0.4rem; flex-wrap: wrap;"></div>
     </div>
 
     <!-- Messages Body -->
@@ -374,7 +395,7 @@
 
     <!-- Input Footer -->
     <form id="hodAdminChatForm" onsubmit="sendHodAdminMessage(event)" style="padding: 0.75rem 1rem; background: #ffffff; border-top: 1px solid #e2e8f0; display: flex; gap: 0.5rem;">
-      <input type="text" id="hodAdminChatInput" class="form-control" placeholder="Type a direct message to Central Admin..." required style="flex: 1;">
+      <input type="text" id="hodAdminChatInput" class="form-control" placeholder="Type a direct message..." required style="flex: 1;">
       <button type="submit" class="btn btn-primary" style="font-weight: 700; padding: 0 1.25rem;">
         Send 🚀
       </button>
@@ -392,20 +413,70 @@
 <script>
 let hodSocket = null;
 const currentHodId = {{ current_user.id }};
+let activePartnerId = null;
 
-function openHodAdminChat() {
+function openHodAdminChat(targetPartnerId = null) {
   const modal = document.getElementById('hodAdminChatModal');
   modal.style.display = 'flex';
 
   const container = document.getElementById('hodAdminMessagesContainer');
   container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">⏳ Loading message history...</div>';
 
-  fetch(`/api/admin-hod-messages/${currentHodId}`)
-    .then(res => res.json())
+  const url = targetPartnerId 
+    ? `/api/admin-hod-messages/${currentHodId}?partner_id=${targetPartnerId}` 
+    : `/api/admin-hod-messages/${currentHodId}`;
+
+  fetch(url)
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      return res.json();
+    })
     .then(data => {
+      if (data.partner) {
+        activePartnerId = data.partner.id;
+        const titleEl = document.getElementById('hodChatModalTitle');
+        const subEl = document.getElementById('hodChatModalSubtitle');
+        const iconEl = document.getElementById('hodChatModalIcon');
+        const inputEl = document.getElementById('hodAdminChatInput');
+
+        if (data.partner.role === 'principal') {
+          titleEl.textContent = 'Principal Executive Desk';
+          subEl.textContent = `Direct channel with ${data.partner.name}`;
+          iconEl.textContent = '🎓';
+          inputEl.placeholder = 'Type a direct message to Principal...';
+        } else {
+          titleEl.textContent = 'Central Administrator Desk';
+          subEl.textContent = `Direct channel with ${data.partner.name}`;
+          iconEl.textContent = '⚡';
+          inputEl.placeholder = 'Type a direct message to Central Admin...';
+        }
+      }
+
+      // Render partner switcher tabs if multiple partners available
+      const tabsBar = document.getElementById('hodChatPartnerTabs');
+      const pillsContainer = document.getElementById('hodChatPartnerPills');
+      if (data.available_partners && data.available_partners.length > 1) {
+        tabsBar.style.display = 'flex';
+        pillsContainer.innerHTML = '';
+        data.available_partners.forEach(p => {
+          const isActive = activePartnerId && p.id === activePartnerId;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          const icon = p.role === 'principal' ? '🎓' : '⚡';
+          const roleLabel = p.role === 'principal' ? 'Principal' : 'Admin';
+          btn.innerHTML = `${icon} <strong>${roleLabel}</strong> (${p.name})`;
+          btn.style.cssText = `font-size: 0.74rem; padding: 3px 10px; border-radius: 14px; cursor: pointer; border: 1px solid ${isActive ? '#4338ca' : '#cbd5e1'}; background: ${isActive ? '#4338ca' : '#ffffff'}; color: ${isActive ? '#ffffff' : '#334155'}; transition: all 0.15s ease;`;
+          btn.onclick = () => openHodAdminChat(p.id);
+          pillsContainer.appendChild(btn);
+        });
+      } else {
+        tabsBar.style.display = 'none';
+      }
+
       renderHodAdminMessages(data.messages || []);
     })
     .catch(err => {
+      console.error('Error loading HOD chat history:', err);
       container.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 1rem;">Failed to load messages.</div>';
     });
 
@@ -413,6 +484,15 @@ function openHodAdminChat() {
     if (!hodSocket) {
       hodSocket = io();
       hodSocket.on('admin_hod_chat', function(msg) {
+        if (!msg) return;
+        // Verify this message is for this HOD
+        if (msg.hod_id !== currentHodId && msg.sender_id !== currentHodId && msg.receiver_id !== currentHodId) {
+          return;
+        }
+        // If an active partner is open, only append if this message belongs to the active conversation
+        if (activePartnerId && msg.sender_id !== activePartnerId && msg.receiver_id !== activePartnerId && msg.sender_id !== currentHodId) {
+          return;
+        }
         appendHodAdminMessage(msg);
       });
     }
@@ -434,7 +514,7 @@ function closeHodAdminChat() {
 function renderHodAdminMessages(messages) {
   const container = document.getElementById('hodAdminMessagesContainer');
   if (!messages || messages.length === 0) {
-    container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">✨ No messages yet. Send a direct message to Central Admin!</div>';
+    container.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem;">✨ No messages yet. Send a direct message to begin communicating!</div>';
     return;
   }
 
@@ -451,7 +531,7 @@ function appendHodAdminMessage(msg, scroll = true) {
   if (msg.id) seenDeptHodAdminMsgIds.add(String(msg.id));
 
   const container = document.getElementById('hodAdminMessagesContainer');
-  if (container.children.length === 1 && container.children[0].textContent.includes('No messages yet')) {
+  if (container.children.length === 1 && (container.children[0].textContent.includes('No messages yet') || container.children[0].textContent.includes('Loading message history'))) {
     container.innerHTML = '';
   }
 
@@ -462,9 +542,20 @@ function appendHodAdminMessage(msg, scroll = true) {
   msgEl.style.alignItems = isMe ? 'flex-end' : 'flex-start';
   msgEl.style.marginBottom = '0.5rem';
 
+  let senderLabel = 'You (HOD)';
+  if (!isMe) {
+    if (msg.sender_role === 'principal') {
+      senderLabel = `${msg.sender_name || 'Principal'} (Principal)`;
+    } else if (msg.sender_role === 'admin') {
+      senderLabel = `${msg.sender_name || 'Admin'} (Central Admin)`;
+    } else {
+      senderLabel = msg.sender_name || 'Management Desk';
+    }
+  }
+
   msgEl.innerHTML = `
     <div style="font-size: 0.72rem; color: #64748b; margin-bottom: 2px;">
-      ${isMe ? 'You (HOD)' : msg.sender_name + ' (Central Admin)'}
+      ${senderLabel}
     </div>
     <div style="max-width: 80%; padding: 0.65rem 0.95rem; border-radius: 12px; font-size: 0.88rem; line-height: 1.4; ${isMe ? 'background: var(--primary); color: #ffffff; border-bottom-right-radius: 2px;' : 'background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'}">
       ${escapeHtml(msg.message)}
@@ -491,15 +582,22 @@ function sendHodAdminMessage(e) {
   fetch(`/api/admin-hod-messages/${currentHodId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: text })
+    body: JSON.stringify({ 
+      message: text,
+      partner_id: activePartnerId
+    })
   })
-  .then(res => res.json())
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    return res.json();
+  })
   .then(data => {
     if (data.status === 'success' && data.message) {
       appendHodAdminMessage(data.message);
     }
   })
   .catch(err => {
+    console.error('Error sending HOD message:', err);
     alert('Failed to send message.');
   });
 }

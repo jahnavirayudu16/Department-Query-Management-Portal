@@ -12,9 +12,12 @@ def get_db():
         )
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
-        g.db.execute("PRAGMA journal_mode = WAL")      # Faster concurrent reads + writes
-        g.db.execute("PRAGMA cache_size = -8000")      # 8 MB page cache
-        g.db.execute("PRAGMA synchronous = NORMAL")    # Balanced durability vs speed
+        g.db.execute("PRAGMA journal_mode = WAL")          # Concurrent reads + writes
+        g.db.execute("PRAGMA synchronous = NORMAL")        # High performance with crash safety
+        g.db.execute("PRAGMA cache_size = -16000")         # 16 MB in-memory cache
+        g.db.execute("PRAGMA temp_store = MEMORY")         # Temp tables and sorting in RAM
+        g.db.execute("PRAGMA mmap_size = 268435456")       # 256 MB memory-mapped I/O
+        g.db.execute("PRAGMA busy_timeout = 5000")         # Wait up to 5s instead of throwing locked error
     return g.db
 
 def get_standalone_db():

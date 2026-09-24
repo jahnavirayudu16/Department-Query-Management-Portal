@@ -174,15 +174,15 @@
           <form id="chatForm" method="POST" action="{{ url_for('post_message', query_id=query.id) }}" enctype="multipart/form-data">
             <div style="display: flex; flex-direction: column; width: 100%; gap: 0.5rem;">
               
-              {% if current_user.role in ['staff', 'hod'] or (current_user.role == 'faculty' and query.assigned_staff_id == current_user.id) %}
+              {% if current_user.role in ['staff', 'hod', 'principal'] or (current_user.role == 'faculty' and query.assigned_staff_id == current_user.id) %}
               <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #b45309;">
                 <input type="checkbox" id="internalNoteCheck" name="is_internal_note" value="true">
-                <label for="internalNoteCheck" style="cursor: pointer; font-weight: 600;">🔒 Post as Private Internal Note (Staff/HOD Only)</label>
+                <label for="internalNoteCheck" style="cursor: pointer; font-weight: 600;">🔒 Post as Private Internal Note (Staff/HOD/Principal Only)</label>
               </div>
               {% endif %}
 
               <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <input type="text" id="messageInput" name="message" class="form-control" placeholder="{% if current_user.role == 'hod' %}Type response to student or assignment note...{% else %}Type your response or question here...{% endif %}" autocomplete="off">
+                <input type="text" id="messageInput" name="message" class="form-control" placeholder="{% if current_user.role == 'principal' %}Type response as Principal or executive note...{% elif current_user.role == 'hod' %}Type response to student or assignment note...{% else %}Type your response or question here...{% endif %}" autocomplete="off">
                 
                 <label for="chatAttachment" class="btn btn-secondary" style="padding: 0.7rem 0.9rem; cursor: pointer;" title="Attach file">
                   📎
@@ -212,7 +212,14 @@
       {% if current_user.role in ['admin', 'hod', 'ao', 'principal'] %}
       <div class="card" style="border-top: 4px solid var(--primary); background: #ffffff;">
         
-        {% if is_assigned_to_current_hod or (current_user.role == 'hod' and query.assigned_staff_id == current_user.id) %}
+        {% if is_assigned_to_current_principal or (current_user.role == 'principal' and query.assigned_staff_id == current_user.id) %}
+        <div style="background: #fdf2f8; border: 1.5px solid #fbcfe8; border-radius: var(--radius-sm); padding: 0.75rem 0.9rem; margin-bottom: 1rem; font-size: 0.83rem; color: #831843; line-height: 1.45;">
+          <div style="font-weight: 800; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.25rem;">
+            <span>🏛️</span> Assigned to You (Principal Executive Desk)
+          </div>
+          You are <strong>directly handling this query</strong>. You can <strong>resolve this query directly</strong> using the <em>Resolution Desk</em> below, communicate in the conversation, or <strong>assign/escalate it to an HOD or Staff</strong> using the form below.
+        </div>
+        {% elif is_assigned_to_current_hod or (current_user.role == 'hod' and query.assigned_staff_id == current_user.id) %}
         <div style="background: #eef2ff; border: 1.5px solid #c7d2fe; border-radius: var(--radius-sm); padding: 0.75rem 0.9rem; margin-bottom: 1rem; font-size: 0.83rem; color: #312e81; line-height: 1.45;">
           <div style="font-weight: 800; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.25rem;">
             <span>📌</span> Assigned to You (HOD Desk)
@@ -330,12 +337,32 @@
           </button>
         </form>
 
+        {% if current_user.role == 'principal' and query.assigned_staff_id != current_user.id %}
+        <!-- Principal Quick Take Action Form -->
+        <form method="POST" action="{{ url_for('reassign_query', query_id=query.id) }}" style="margin-top: 0.75rem;">
+          <input type="hidden" name="action_type" value="take_query">
+          <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%; font-weight: 800; background: #fdf2f8; color: #9d174d; border: 1.5px solid #fbcfe8; padding: 0.55rem;">
+            ⚡ Take Query (Handle Directly as Principal)
+          </button>
+        </form>
+        {% endif %}
+
         {% if current_user.role == 'hod' and query.assigned_staff_id != current_user.id %}
         <!-- HOD Quick Take Action Form -->
         <form method="POST" action="{{ url_for('reassign_query', query_id=query.id) }}" style="margin-top: 0.75rem;">
           <input type="hidden" name="action_type" value="take_query">
           <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%; font-weight: 800; background: #eef2ff; color: #4338ca; border: 1.5px solid #c7d2fe; padding: 0.55rem;">
             ⚡ Take Query (Handle Directly as HOD)
+          </button>
+        </form>
+        {% endif %}
+
+        {% if current_user.role == 'hod' %}
+        <!-- HOD Escalate to Principal Action Form -->
+        <form method="POST" action="{{ url_for('reassign_query', query_id=query.id) }}" style="margin-top: 0.5rem;" onsubmit="return confirm('Escalate this query to the Principal Executive Desk for direct handling?');">
+          <input type="hidden" name="action_type" value="escalate_principal">
+          <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%; font-weight: 800; background: #fff1f2; color: #be123c; border: 1.5px solid #fecdd3; padding: 0.55rem;">
+            🔺 Escalate to Principal Executive Desk
           </button>
         </form>
         {% endif %}
@@ -479,8 +506,8 @@
       </div>
       {% endif %}
 
-      <!-- Audit History Logs (For Staff and Admin) -->
-      {% if audit_logs and current_user.role in ['staff', 'admin'] %}
+      <!-- Audit History Logs (For Staff, Admin, Principal, HOD, and AO) -->
+      {% if audit_logs and current_user.role in ['staff', 'admin', 'principal', 'hod', 'ao'] %}
       <div class="card">
         <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem;">📜 Activity Audit Trail</h3>
         <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto;">

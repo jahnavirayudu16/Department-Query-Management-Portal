@@ -142,10 +142,15 @@ CREATE INDEX IF NOT EXISTS idx_queries_assigned_staff_id ON queries(assigned_sta
 CREATE INDEX IF NOT EXISTS idx_queries_staff_status ON queries(assigned_staff_id, status);
 CREATE INDEX IF NOT EXISTS idx_queries_dept_status ON queries(department, status);
 CREATE INDEX IF NOT EXISTS idx_queries_dept_course ON queries(department, course);
+CREATE INDEX IF NOT EXISTS idx_queries_dept_status_prio ON queries(department, status, priority);
+CREATE INDEX IF NOT EXISTS idx_queries_staff_status_prio ON queries(assigned_staff_id, status, priority);
 CREATE INDEX IF NOT EXISTS idx_messages_query_id ON messages(query_id);
+CREATE INDEX IF NOT EXISTS idx_messages_query_created ON messages(query_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
--- Composite index for fast unread notification count (used on every page)
+-- Composite index for fast unread notification count & recent fetch (used on every page)
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread_created ON notifications(user_id, is_read, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_users_role_dept ON users(role, is_active, department);
 CREATE INDEX IF NOT EXISTS idx_admin_hod_sender ON admin_hod_messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_admin_hod_receiver ON admin_hod_messages(receiver_id);
 """
@@ -187,7 +192,12 @@ def check_and_migrate_db(db_conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_staff_status ON queries(assigned_staff_id, status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_dept_status ON queries(department, status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_dept_course ON queries(department, course)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_dept_status_prio ON queries(department, status, priority)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_staff_status_prio ON queries(assigned_staff_id, status, priority)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_query_created ON messages(query_id, created_at DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_unread_created ON notifications(user_id, is_read, created_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_role_dept ON users(role, is_active, department)")
             
         db_conn.commit()
     except Exception as e:

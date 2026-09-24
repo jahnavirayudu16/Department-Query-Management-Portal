@@ -14,9 +14,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   
-  <!-- Socket.IO & Chart.js -->
+  <!-- Socket.IO -->
   <script defer src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body data-user-role="{{ current_user.role if current_user else '' }}" data-user-dept="{{ current_user.department if current_user else '' }}" data-user-id="{{ current_user.id if current_user else '' }}">
@@ -45,8 +44,11 @@
         {% if current_user.role == 'principal' %}
         <!-- Principal Focused Navigation -->
         <div class="nav-section-title">Principal Navigation</div>
-        <a href="{{ url_for('department_dashboard', dept='Others') }}" class="nav-item {% if request.endpoint == 'department_dashboard' %}active{% endif %}">
+        <a href="{{ url_for('department_dashboard', dept='Others', view='received') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and (request.args.get('view') in ['received', 'all'] or not request.args.get('view')) %}active{% endif %}">
           <span class="icon">📥</span> Received Queries
+        </a>
+        <a href="{{ url_for('department_dashboard', view='assigned') }}" class="nav-item {% if request.endpoint == 'department_dashboard' and request.args.get('view') == 'assigned' %}active{% endif %}">
+          <span class="icon">🏛️</span> Handled by Principal
         </a>
         <a href="{{ url_for('admin_analytics') }}" class="nav-item {% if request.endpoint in ['admin_analytics', 'hod_analytics'] %}active{% endif %}">
           <span class="icon">📊</span> Analysis
