@@ -12,7 +12,9 @@ def get_db():
         )
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
-        init_db(g.db)
+        g.db.execute("PRAGMA journal_mode = WAL")      # Faster concurrent reads + writes
+        g.db.execute("PRAGMA cache_size = -8000")      # 8 MB page cache
+        g.db.execute("PRAGMA synchronous = NORMAL")    # Balanced durability vs speed
     return g.db
 
 def get_standalone_db():

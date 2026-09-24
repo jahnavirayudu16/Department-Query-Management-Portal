@@ -16,7 +16,7 @@
   
   <!-- Socket.IO & Chart.js -->
   <script defer src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body data-user-role="{{ current_user.role if current_user else '' }}" data-user-dept="{{ current_user.department if current_user else '' }}" data-user-id="{{ current_user.id if current_user else '' }}">

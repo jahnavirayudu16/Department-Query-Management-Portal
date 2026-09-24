@@ -137,11 +137,19 @@ CREATE INDEX IF NOT EXISTS idx_queries_department ON queries(department);
 CREATE INDEX IF NOT EXISTS idx_queries_category ON queries(category);
 CREATE INDEX IF NOT EXISTS idx_queries_status ON queries(status);
 CREATE INDEX IF NOT EXISTS idx_queries_priority ON queries(priority);
+CREATE INDEX IF NOT EXISTS idx_queries_assigned_staff_id ON queries(assigned_staff_id);
+-- Composite indexes for the most common filter combos
+CREATE INDEX IF NOT EXISTS idx_queries_staff_status ON queries(assigned_staff_id, status);
+CREATE INDEX IF NOT EXISTS idx_queries_dept_status ON queries(department, status);
+CREATE INDEX IF NOT EXISTS idx_queries_dept_course ON queries(department, course);
 CREATE INDEX IF NOT EXISTS idx_messages_query_id ON messages(query_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+-- Composite index for fast unread notification count (used on every page)
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_admin_hod_sender ON admin_hod_messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_admin_hod_receiver ON admin_hod_messages(receiver_id);
 """
+
 
 def check_and_migrate_db(db_conn):
     """Automatically adds missing columns to existing database tables if schema was updated."""
@@ -174,9 +182,17 @@ def check_and_migrate_db(db_conn):
         if 'is_read' not in msg_cols:
             cursor.execute("ALTER TABLE admin_hod_messages ADD COLUMN is_read INTEGER DEFAULT 0")
             
+        # Ensure new composite performance indexes exist on already-deployed databases
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_assigned_staff_id ON queries(assigned_staff_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_staff_status ON queries(assigned_staff_id, status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_dept_status ON queries(department, status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_queries_dept_course ON queries(department, course)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read)")
+            
         db_conn.commit()
     except Exception as e:
         print(f"Migration notice: {e}")
+
 
 def init_db(db_conn):
     """Initializes the database schema."""

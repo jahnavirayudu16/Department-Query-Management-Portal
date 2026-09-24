@@ -31,19 +31,48 @@ ONLINE_USERS = {} # user_id -> set of socket session IDs
 
 @app.before_request
 def track_user_activity():
-    """Updates user last_active_at and tracks online presence on every HTTP request."""
+    """Updates user activity without writing to the database on every request."""
     user = get_current_user()
+
     if user and user.get('id'):
         uid = user['id']
+
         if uid not in ONLINE_USERS:
             ONLINE_USERS[uid] = set()
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        last_active = user.get('last_active_at')
+        now = datetime.now()
+
         try:
+            if last_active:
+                if isinstance(last_active, str):
+                    last_active = datetime.strptime(
+                        last_active.split('.')[0],
+                        '%Y-%m-%d %H:%M:%S'
+                    )
+
+                # Update only once every 5 minutes
+                if (now - last_active).total_seconds() < 300:
+                    return
+
             db = get_db()
-            db.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now_str, uid))
+            now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+
+            db.execute(
+                "UPDATE users SET last_active_at = ? WHERE id = ?",
+                (now_str, uid)
+            )
             db.commit()
+
         except Exception:
             pass
+
+@app.after_request
+def add_cache_headers(response):
+    """Instructs browsers to cache static assets to eliminate reload delays on Render."""
+    if request.path.startswith('/static/'):
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+    return response
 
 # -------------------------------------------------------------
 # HELPERS & DECORATORS
@@ -82,14 +111,20 @@ def role_required(allowed_roles):
     return decorator
 
 def get_current_user():
-    """Retrieve the currently authenticated user from the database as a dictionary."""
+    """Retrieve the currently authenticated user from the database as a dictionary.
+    Cached on Flask's g object so the DB is queried at most once per request."""
+    if hasattr(g, '_current_user'):
+        return g._current_user
     if 'user_id' in session:
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
         if not user or not user['is_active']:
             session.clear()
+            g._current_user = None
             return None
-        return dict(user)
+        g._current_user = dict(user)
+        return g._current_user
+    g._current_user = None
     return None
 
 @app.context_processor
@@ -101,12 +136,13 @@ def inject_global_context():
     
     if user:
         db = get_db()
+        # Single query: fetch up to 5 latest unread + count in one shot
         notifications = db.execute(
             'SELECT * FROM notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 5',
             (user['id'],)
         ).fetchall()
         unread_notifications = [dict(n) for n in notifications]
-        
+        # Count comes from a lightweight separate query (SQLite COUNT on indexed column is O(1))
         count_row = db.execute(
             'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
             (user['id'],)
@@ -201,7 +237,7 @@ def create_notification(user_id, query_id, title, message, notif_type='info'):
             INSERT INTO notifications (user_id, query_id, title, message, type, is_read, created_at)
             VALUES (?, ?, ?, ?, ?, 0, ?)
         """, (user_id, query_id, title, message, notif_type, now_str))
-        db.commit()
+
     except Exception as e:
         print(f"Notification error bypassed: {e}")
 
@@ -299,7 +335,6 @@ def login():
                 return redirect(url_for('dashboard'))
         
     db = get_db()
-    ensure_demo_accounts(db)
         
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -457,13 +492,22 @@ def dashboard():
         
     db = get_db()
     
-    # User query counts
+    # User query counts — single aggregation query instead of 5 separate SELECTs
+    stats_row = db.execute("""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'New' THEN 1 ELSE 0 END) as new,
+            SUM(CASE WHEN status IN ('Assigned', 'In Progress') THEN 1 ELSE 0 END) as in_progress,
+            SUM(CASE WHEN status = 'Waiting for User' THEN 1 ELSE 0 END) as waiting,
+            SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved
+        FROM queries WHERE user_id = ?
+    """, (user['id'],)).fetchone()
     stats = {
-        'total': db.execute('SELECT COUNT(*) FROM queries WHERE user_id = ?', (user['id'],)).fetchone()[0],
-        'new': db.execute("SELECT COUNT(*) FROM queries WHERE user_id = ? AND status = 'New'", (user['id'],)).fetchone()[0],
-        'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE user_id = ? AND status IN ('Assigned', 'In Progress')", (user['id'],)).fetchone()[0],
-        'waiting': db.execute("SELECT COUNT(*) FROM queries WHERE user_id = ? AND status = 'Waiting for User'", (user['id'],)).fetchone()[0],
-        'resolved': db.execute("SELECT COUNT(*) FROM queries WHERE user_id = ? AND status = 'Resolved'", (user['id'],)).fetchone()[0],
+        'total': stats_row['total'] or 0,
+        'new': stats_row['new'] or 0,
+        'in_progress': stats_row['in_progress'] or 0,
+        'waiting': stats_row['waiting'] or 0,
+        'resolved': stats_row['resolved'] or 0,
     }
     
     # Filter and Search
@@ -1756,56 +1800,76 @@ def department_dashboard():
     db = get_db()
     today_str = datetime.now().strftime('%Y-%m-%d')
     
-    # Compute stats
+    # Compute stats — single aggregation query per role branch instead of 5 separate SELECTs
     if is_resolver:
-        stats = {
-            'new': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('New', 'Assigned')", (user['id'],)).fetchone()[0],
-            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (user['id'],)).fetchone()[0],
-            'high': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND priority = 'High' AND status != 'Resolved'", (user['id'],)).fetchone()[0],
-            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('Assigned', 'In Progress')", (user['id'],)).fetchone()[0],
-            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (user['id'], f"{today_str}%", f"{today_str}%")).fetchone()[0]
-        }
+        s = db.execute("""
+            SELECT
+                SUM(CASE WHEN status IN ('New','Assigned') THEN 1 ELSE 0 END) as new,
+                SUM(CASE WHEN priority IN ('Critical','Urgent') AND status != 'Resolved' THEN 1 ELSE 0 END) as urgent,
+                SUM(CASE WHEN priority = 'High' AND status != 'Resolved' THEN 1 ELSE 0 END) as high,
+                SUM(CASE WHEN status IN ('Assigned','In Progress') THEN 1 ELSE 0 END) as in_progress,
+                SUM(CASE WHEN status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?) THEN 1 ELSE 0 END) as resolved_today
+            FROM queries WHERE assigned_staff_id = ?
+        """, (f"{today_str}%", f"{today_str}%", user['id'])).fetchone()
+        stats = {'new': s['new'] or 0, 'urgent': s['urgent'] or 0, 'high': s['high'] or 0,
+                 'in_progress': s['in_progress'] or 0, 'resolved_today': s['resolved_today'] or 0}
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE assigned_staff_id = ? AND first_response_at IS NOT NULL
         """, (user['id'],)).fetchall()
     elif user['role'] == 'hod' and user.get('course'):
         hod_c = user['course']
-        stats = {
-            'new': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status = 'New'", (dept, dept, hod_c, user['id'])).fetchone()[0],
-            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0],
-            'high': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND priority = 'High' AND status != 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0],
-            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status IN ('Assigned', 'In Progress')", (dept, dept, hod_c, user['id'])).fetchone()[0],
-            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (dept, dept, hod_c, user['id'], f"{today_str}%", f"{today_str}%")).fetchone()[0]
-        }
+        s = db.execute("""
+            SELECT
+                SUM(CASE WHEN status = 'New' THEN 1 ELSE 0 END) as new,
+                SUM(CASE WHEN priority IN ('Critical','Urgent') AND status != 'Resolved' THEN 1 ELSE 0 END) as urgent,
+                SUM(CASE WHEN priority = 'High' AND status != 'Resolved' THEN 1 ELSE 0 END) as high,
+                SUM(CASE WHEN status IN ('Assigned','In Progress') THEN 1 ELSE 0 END) as in_progress,
+                SUM(CASE WHEN status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?) THEN 1 ELSE 0 END) as resolved_today
+            FROM queries
+            WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?)
+        """, (f"{today_str}%", f"{today_str}%", dept, dept, hod_c, user['id'])).fetchone()
+        stats = {'new': s['new'] or 0, 'urgent': s['urgent'] or 0, 'high': s['high'] or 0,
+                 'in_progress': s['in_progress'] or 0, 'resolved_today': s['resolved_today'] or 0}
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND first_response_at IS NOT NULL
         """, (dept, dept, hod_c, user['id'])).fetchall()
     elif user['role'] == 'hod':
-        stats = {
-            'new': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status = 'New'", (dept, dept, user['id'])).fetchone()[0],
-            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (dept, dept, user['id'])).fetchone()[0],
-            'high': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND priority = 'High' AND status != 'Resolved'", (dept, dept, user['id'])).fetchone()[0],
-            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status IN ('Assigned', 'In Progress')", (dept, dept, user['id'])).fetchone()[0],
-            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (dept, dept, user['id'], f"{today_str}%", f"{today_str}%")).fetchone()[0]
-        }
+        s = db.execute("""
+            SELECT
+                SUM(CASE WHEN status = 'New' THEN 1 ELSE 0 END) as new,
+                SUM(CASE WHEN priority IN ('Critical','Urgent') AND status != 'Resolved' THEN 1 ELSE 0 END) as urgent,
+                SUM(CASE WHEN priority = 'High' AND status != 'Resolved' THEN 1 ELSE 0 END) as high,
+                SUM(CASE WHEN status IN ('Assigned','In Progress') THEN 1 ELSE 0 END) as in_progress,
+                SUM(CASE WHEN status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?) THEN 1 ELSE 0 END) as resolved_today
+            FROM queries
+            WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?)
+        """, (f"{today_str}%", f"{today_str}%", dept, dept, user['id'])).fetchone()
+        stats = {'new': s['new'] or 0, 'urgent': s['urgent'] or 0, 'high': s['high'] or 0,
+                 'in_progress': s['in_progress'] or 0, 'resolved_today': s['resolved_today'] or 0}
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND first_response_at IS NOT NULL
         """, (dept, dept, user['id'])).fetchall()
     else:
-        stats = {
-            'new': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status = 'New'", (dept, dept, dept)).fetchone()[0],
-            'urgent': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0],
-            'high': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND priority = 'High' AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0],
-            'in_progress': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status IN ('Assigned', 'In Progress')", (dept, dept, dept)).fetchone()[0],
-            'resolved_today': db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?)", (dept, dept, dept, f"{today_str}%", f"{today_str}%")).fetchone()[0]
-        }
+        s = db.execute("""
+            SELECT
+                SUM(CASE WHEN status = 'New' THEN 1 ELSE 0 END) as new,
+                SUM(CASE WHEN priority IN ('Critical','Urgent') AND status != 'Resolved' THEN 1 ELSE 0 END) as urgent,
+                SUM(CASE WHEN priority = 'High' AND status != 'Resolved' THEN 1 ELSE 0 END) as high,
+                SUM(CASE WHEN status IN ('Assigned','In Progress') THEN 1 ELSE 0 END) as in_progress,
+                SUM(CASE WHEN status = 'Resolved' AND (resolved_at LIKE ? OR updated_at LIKE ?) THEN 1 ELSE 0 END) as resolved_today
+            FROM queries
+            WHERE (department = ? OR ? = 'All' OR ? = 'All Departments')
+        """, (f"{today_str}%", f"{today_str}%", dept, dept, dept)).fetchone()
+        stats = {'new': s['new'] or 0, 'urgent': s['urgent'] or 0, 'high': s['high'] or 0,
+                 'in_progress': s['in_progress'] or 0, 'resolved_today': s['resolved_today'] or 0}
         resp_rows = db.execute("""
             SELECT created_at, first_response_at FROM queries 
             WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND first_response_at IS NOT NULL
         """, (dept, dept, dept)).fetchall()
+
     
     avg_resp_display = "10 minutes"
     if resp_rows:
@@ -1956,46 +2020,105 @@ def department_dashboard():
         
     queries = db.execute(sql, params).fetchall()
     
-    # Counts for quick tabs
+    # Counts for quick tabs — aggregated per role branch instead of 5-6 separate SELECTs
     delegated_count = 0
     if is_resolver:
         staff_dept = user['department'] if user.get('department') else 'Computer Science & Engineering (CSE)'
         if user['role'] == 'office_staff':
             staff_dept = 'Administrative'
-        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = ? OR department = 'Academics'", (staff_dept,)).fetchone()[0]
-        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR department = 'Academics') AND assigned_staff_id IS NULL AND status != 'Resolved'", (staff_dept,)).fetchone()[0]
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status != 'Resolved'", (user['id'],)).fetchone()[0]
-        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved'", (user['id'],)).fetchone()[0]
+        tc = db.execute("""
+            SELECT
+                COUNT(*) as total_dept_count,
+                SUM(CASE WHEN assigned_staff_id = ? THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN (department = ? OR department = 'Academics') AND assigned_staff_id IS NULL AND status != 'Resolved' THEN 1 ELSE 0 END) as unassigned_count,
+                SUM(CASE WHEN assigned_staff_id = ? AND status != 'Resolved' THEN 1 ELSE 0 END) as unresolved_count,
+                SUM(CASE WHEN assigned_staff_id = ? AND status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count
+            FROM queries WHERE (department = ? OR department = 'Academics')
+        """, (user['id'], staff_dept, user['id'], user['id'], staff_dept)).fetchone()
+        total_dept_count = tc['total_dept_count'] or 0
+        assigned_count = tc['assigned_count'] or 0
+        unassigned_count = tc['unassigned_count'] or 0
+        unresolved_count = tc['unresolved_count'] or 0
+        resolved_count = tc['resolved_count'] or 0
     elif user['role'] == 'hod' and user.get('course'):
         hod_c = user['course']
-        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL)", (dept, dept, hod_c)).fetchone()[0]
-        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
-        delegated_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ?", (dept, dept, hod_c, user['id'])).fetchone()[0]
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept, hod_c)).fetchone()[0]
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status != 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0]
-        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status = 'Resolved'", (dept, dept, hod_c, user['id'])).fetchone()[0]
+        tc = db.execute("""
+            SELECT
+                SUM(CASE WHEN (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) THEN 1 ELSE 0 END) as total_dept_count,
+                SUM(CASE WHEN assigned_staff_id = ? THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ? THEN 1 ELSE 0 END) as delegated_count,
+                SUM(CASE WHEN (department = ? OR ? = 'All') AND (course = ? OR course IS NULL) AND assigned_staff_id IS NULL AND status != 'Resolved' THEN 1 ELSE 0 END) as unassigned_count,
+                SUM(CASE WHEN (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status != 'Resolved' THEN 1 ELSE 0 END) as unresolved_count,
+                SUM(CASE WHEN (((department = ? OR ? = 'All') AND (course = ? OR course IS NULL)) OR assigned_staff_id = ?) AND status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count
+            FROM queries
+        """, (dept, dept, hod_c,
+              user['id'],
+              dept, dept, hod_c, user['id'],
+              dept, dept, hod_c,
+              dept, dept, hod_c, user['id'],
+              dept, dept, hod_c, user['id'])).fetchone()
+        total_dept_count = tc['total_dept_count'] or 0
+        assigned_count = tc['assigned_count'] or 0
+        delegated_count = tc['delegated_count'] or 0
+        unassigned_count = tc['unassigned_count'] or 0
+        unresolved_count = tc['unresolved_count'] or 0
+        resolved_count = tc['resolved_count'] or 0
     elif user['role'] == 'hod':
-        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All')", (dept, dept)).fetchone()[0]
-        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (user['id'],)).fetchone()[0]
-        delegated_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ?", (dept, dept, user['id'])).fetchone()[0]
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All') AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept)).fetchone()[0]
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status != 'Resolved'", (dept, dept, user['id'])).fetchone()[0]
-        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status = 'Resolved'", (dept, dept, user['id'])).fetchone()[0]
+        tc = db.execute("""
+            SELECT
+                SUM(CASE WHEN department = ? OR ? = 'All' THEN 1 ELSE 0 END) as total_dept_count,
+                SUM(CASE WHEN assigned_staff_id = ? THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN (department = ? OR ? = 'All') AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ? THEN 1 ELSE 0 END) as delegated_count,
+                SUM(CASE WHEN (department = ? OR ? = 'All') AND assigned_staff_id IS NULL AND status != 'Resolved' THEN 1 ELSE 0 END) as unassigned_count,
+                SUM(CASE WHEN (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status != 'Resolved' THEN 1 ELSE 0 END) as unresolved_count,
+                SUM(CASE WHEN (department = ? OR ? = 'All' OR assigned_staff_id = ?) AND status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count
+            FROM queries
+        """, (dept, dept,
+              user['id'],
+              dept, dept, user['id'],
+              dept, dept,
+              dept, dept, user['id'],
+              dept, dept, user['id'])).fetchone()
+        total_dept_count = tc['total_dept_count'] or 0
+        assigned_count = tc['assigned_count'] or 0
+        delegated_count = tc['delegated_count'] or 0
+        unassigned_count = tc['unassigned_count'] or 0
+        unresolved_count = tc['unresolved_count'] or 0
+        resolved_count = tc['resolved_count'] or 0
     elif user['role'] == 'ao':
-        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative'").fetchone()[0]
-        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? OR (department = 'Administrative' AND assigned_staff_id IS NOT NULL)", (user['id'],)).fetchone()[0]
-        delegated_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND assigned_staff_id IS NOT NULL AND assigned_staff_id != ?", (user['id'],)).fetchone()[0]
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND assigned_staff_id IS NULL AND status != 'Resolved'").fetchone()[0]
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND status != 'Resolved'").fetchone()[0]
-        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE department = 'Administrative' AND status = 'Resolved'").fetchone()[0]
+        tc = db.execute("""
+            SELECT
+                COUNT(*) as total_dept_count,
+                SUM(CASE WHEN assigned_staff_id = ? OR assigned_staff_id IS NOT NULL THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN assigned_staff_id IS NOT NULL AND assigned_staff_id != ? THEN 1 ELSE 0 END) as delegated_count,
+                SUM(CASE WHEN assigned_staff_id IS NULL AND status != 'Resolved' THEN 1 ELSE 0 END) as unassigned_count,
+                SUM(CASE WHEN status != 'Resolved' THEN 1 ELSE 0 END) as unresolved_count,
+                SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count
+            FROM queries WHERE department = 'Administrative'
+        """, (user['id'], user['id'])).fetchone()
+        total_dept_count = tc['total_dept_count'] or 0
+        assigned_count = tc['assigned_count'] or 0
+        delegated_count = tc['delegated_count'] or 0
+        unassigned_count = tc['unassigned_count'] or 0
+        unresolved_count = tc['unresolved_count'] or 0
+        resolved_count = tc['resolved_count'] or 0
     else:
-        total_dept_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments')", (dept, dept, dept)).fetchone()[0]
-        assigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND assigned_staff_id IS NOT NULL", (dept, dept, dept)).fetchone()[0]
+        tc = db.execute("""
+            SELECT
+                COUNT(*) as total_dept_count,
+                SUM(CASE WHEN assigned_staff_id IS NOT NULL THEN 1 ELSE 0 END) as assigned_count,
+                SUM(CASE WHEN assigned_staff_id IS NULL AND status != 'Resolved' THEN 1 ELSE 0 END) as unassigned_count,
+                SUM(CASE WHEN status != 'Resolved' THEN 1 ELSE 0 END) as unresolved_count,
+                SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_count
+            FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments')
+        """, (dept, dept, dept)).fetchone()
+        total_dept_count = tc['total_dept_count'] or 0
+        assigned_count = tc['assigned_count'] or 0
         delegated_count = assigned_count
-        unassigned_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND assigned_staff_id IS NULL AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
-        unresolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status != 'Resolved'", (dept, dept, dept)).fetchone()[0]
-        resolved_count = db.execute("SELECT COUNT(*) FROM queries WHERE (department = ? OR ? = 'All' OR ? = 'All Departments') AND status = 'Resolved'", (dept, dept, dept)).fetchone()[0]
+        unassigned_count = tc['unassigned_count'] or 0
+        unresolved_count = tc['unresolved_count'] or 0
+        resolved_count = tc['resolved_count'] or 0
+
     
     # Department info
     dept_info = db.execute("SELECT * FROM departments WHERE name = ?", (dept,)).fetchone()
@@ -2029,43 +2152,72 @@ def department_dashboard():
 def admin_dashboard():
     db = get_db()
     
+    u_stats = db.execute("""
+        SELECT
+            COUNT(*) as total_users,
+            SUM(CASE WHEN role = 'student' THEN 1 ELSE 0 END) as students,
+            SUM(CASE WHEN role = 'faculty' THEN 1 ELSE 0 END) as faculty,
+            SUM(CASE WHEN role = 'staff' THEN 1 ELSE 0 END) as staff,
+            SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) as admins
+        FROM users
+    """).fetchone()
+
+    q_stats = db.execute("""
+        SELECT
+            COUNT(*) as total_queries,
+            SUM(CASE WHEN status != 'Resolved' THEN 1 ELSE 0 END) as pending_queries,
+            SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved_queries,
+            SUM(CASE WHEN priority IN ('Critical', 'Urgent') AND status != 'Resolved' THEN 1 ELSE 0 END) as urgent_queries
+        FROM queries
+    """).fetchone()
+
     stats = {
-        'total_users': db.execute("SELECT COUNT(*) FROM users").fetchone()[0],
-        'students': db.execute("SELECT COUNT(*) FROM users WHERE role = 'student'").fetchone()[0],
-        'faculty': db.execute("SELECT COUNT(*) FROM users WHERE role = 'faculty'").fetchone()[0],
-        'staff': db.execute("SELECT COUNT(*) FROM users WHERE role = 'staff'").fetchone()[0],
-        'admins': db.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0],
-        'total_queries': db.execute("SELECT COUNT(*) FROM queries").fetchone()[0],
-        'pending_queries': db.execute("SELECT COUNT(*) FROM queries WHERE status != 'Resolved'").fetchone()[0],
-        'resolved_queries': db.execute("SELECT COUNT(*) FROM queries WHERE status = 'Resolved'").fetchone()[0],
-        'urgent_queries': db.execute("SELECT COUNT(*) FROM queries WHERE priority IN ('Critical', 'Urgent') AND status != 'Resolved'").fetchone()[0]
+        'total_users': u_stats['total_users'] or 0,
+        'students': u_stats['students'] or 0,
+        'faculty': u_stats['faculty'] or 0,
+        'staff': u_stats['staff'] or 0,
+        'admins': u_stats['admins'] or 0,
+        'total_queries': q_stats['total_queries'] or 0,
+        'pending_queries': q_stats['pending_queries'] or 0,
+        'resolved_queries': q_stats['resolved_queries'] or 0,
+        'urgent_queries': q_stats['urgent_queries'] or 0
     }
     
-    # 3 Category Metrics (Prominent Big Cards)
+    # 3 Category Metrics (Prominent Big Cards) - single aggregated query
     category_cards = []
     cat_meta = {
         'Academics': {'icon': '📚', 'color': '#4f46e5', 'tagline': 'Studies, Exams, Marks, Hall Tickets & Timetables'},
         'Administrative': {'icon': '🏢', 'color': '#0284c7', 'tagline': 'Fees, Receipts, Scholarships, Bonafide & ID Cards'},
         'Others': {'icon': '🔧', 'color': '#d97706', 'tagline': 'Hostel, Mess Food, Campus Wi-Fi, Labs & Transport'}
     }
+    cat_rows = db.execute("""
+        SELECT
+            category,
+            COUNT(*) as total,
+            SUM(CASE WHEN status != 'Resolved' THEN 1 ELSE 0 END) as unresolved,
+            SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved,
+            SUM(CASE WHEN priority IN ('Critical', 'Urgent') AND status != 'Resolved' THEN 1 ELSE 0 END) as urgent
+        FROM queries
+        GROUP BY category
+    """).fetchall()
+    cat_data_map = {r['category']: r for r in cat_rows}
+    dept_rows = db.execute("SELECT name, head_name, contact_email FROM departments").fetchall()
+    dept_meta_map = {d['name']: d for d in dept_rows}
+
     for cat in Config.CATEGORIES:
-        tot = db.execute("SELECT COUNT(*) FROM queries WHERE category = ?", (cat,)).fetchone()[0]
-        unresolved = db.execute("SELECT COUNT(*) FROM queries WHERE category = ? AND status != 'Resolved'", (cat,)).fetchone()[0]
-        resolved = db.execute("SELECT COUNT(*) FROM queries WHERE category = ? AND status = 'Resolved'", (cat,)).fetchone()[0]
-        urgent = db.execute("SELECT COUNT(*) FROM queries WHERE category = ? AND priority IN ('Critical', 'Urgent') AND status != 'Resolved'", (cat,)).fetchone()[0]
-        dept_row = db.execute("SELECT head_name, contact_email FROM departments WHERE name = ?", (cat,)).fetchone()
-        
+        c_stat = cat_data_map.get(cat)
+        d_info = dept_meta_map.get(cat)
         category_cards.append({
             'name': cat,
             'icon': cat_meta[cat]['icon'],
             'color': cat_meta[cat]['color'],
             'tagline': cat_meta[cat]['tagline'],
-            'total': tot,
-            'unresolved': unresolved,
-            'resolved': resolved,
-            'urgent': urgent,
-            'head_name': dept_row['head_name'] if dept_row else 'Desk Lead',
-            'contact_email': dept_row['contact_email'] if dept_row else 'support@college.com'
+            'total': c_stat['total'] if c_stat else 0,
+            'unresolved': c_stat['unresolved'] if c_stat else 0,
+            'resolved': c_stat['resolved'] if c_stat else 0,
+            'urgent': c_stat['urgent'] if c_stat else 0,
+            'head_name': d_info['head_name'] if d_info else 'Desk Lead',
+            'contact_email': d_info['contact_email'] if d_info else 'support@college.com'
         })
 
     # HODs list with live presence and branch workload stats
@@ -2363,15 +2515,26 @@ def analytics_data():
     is_admin = (role == 'admin')
     hod_dept = user['department'] or ''
     
-    # Helper to compute pillar metrics
+    # Helper to compute pillar metrics — single aggregation query instead of 7 separate queries
     def compute_pillar(cat_condition, topic_sql):
-        t_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cat_condition}").fetchone()[0]
-        s_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cat_condition} AND q.status = 'Resolved'").fetchone()[0]
-        p_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cat_condition} AND q.status IN ('In Progress', 'Waiting for User')").fetchone()[0]
-        a_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cat_condition} AND q.assigned_staff_id IS NOT NULL AND q.status != 'Resolved'").fetchone()[0]
-        u_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cat_condition} AND q.assigned_staff_id IS NULL AND q.status != 'Resolved'").fetchone()[0]
-        urg_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cat_condition} AND q.priority IN ('Critical', 'Urgent') AND q.status != 'Resolved'").fetchone()[0]
-        n_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cat_condition} AND q.status = 'New'").fetchone()[0]
+        agg = db.execute(f"""
+            SELECT
+                COUNT(q.id) as total,
+                SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as solved,
+                SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User') THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN q.assigned_staff_id IS NOT NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as assigned,
+                SUM(CASE WHEN q.assigned_staff_id IS NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as unassigned,
+                SUM(CASE WHEN q.priority IN ('Critical', 'Urgent') AND q.status != 'Resolved' THEN 1 ELSE 0 END) as urgent,
+                SUM(CASE WHEN q.status = 'New' THEN 1 ELSE 0 END) as new_q
+            FROM queries q WHERE {cat_condition}
+        """).fetchone()
+        t_q = agg['total'] or 0
+        s_q = agg['solved'] or 0
+        p_q = agg['pending'] or 0
+        a_q = agg['assigned'] or 0
+        u_q = agg['unassigned'] or 0
+        urg_q = agg['urgent'] or 0
+        n_q = agg['new_q'] or 0
         
         st_rows = db.execute(f"SELECT q.status, COUNT(q.id) as c FROM queries q WHERE {cat_condition} GROUP BY q.status ORDER BY c DESC").fetchall()
         pr_rows = db.execute(f"SELECT q.priority, COUNT(q.id) as c FROM queries q WHERE {cat_condition} GROUP BY q.priority ORDER BY c DESC").fetchall()
@@ -2448,6 +2611,124 @@ def analytics_data():
         END
     """
 
+    # FAST-PATH FOR HOD: Compute ONLY the HOD's own branch data, skip all other desk calculations
+    if is_hod:
+        hod_course = user.get('course') or 'B.Tech'
+        if hod_course:
+            b_cond = f"(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others')) AND (q.department = '{hod_dept}' OR q.department IS NULL) AND (q.course = '{hod_course}' OR q.course IS NULL)"
+            where_clause = "WHERE (q.department = ? OR u.department = ?) AND (q.course = ? OR u.course = ? OR q.course IS NULL)"
+            params = [hod_dept, hod_dept, hod_course, hod_course]
+        else:
+            b_cond = f"(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others')) AND (q.department = '{hod_dept}' OR q.department IS NULL)"
+            where_clause = "WHERE (q.department = ? OR u.department = ?)"
+            params = [hod_dept, hod_dept]
+
+        branch_analysis = compute_pillar(b_cond, hod_topic_sql)
+        branch_analysis['branch_name'] = f"{hod_course} {hod_dept}".strip()
+        branch_analysis['course'] = hod_course
+        branch_analysis['department'] = hod_dept
+
+        # Single-query staff workload for branch
+        staff_sql = """
+            SELECT u.id, u.name, u.email, u.designation,
+                   COUNT(q.id) as assigned,
+                   SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as resolved,
+                   SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User', 'Assigned') THEN 1 ELSE 0 END) as pending
+            FROM users u
+            LEFT JOIN queries q ON q.assigned_staff_id = u.id
+            WHERE u.role IN ('staff', 'faculty') AND (u.department = ? OR u.department IS NULL) AND u.is_active = 1
+        """
+        staff_params = [hod_dept]
+        if hod_course:
+            staff_sql += " AND (u.course = ? OR u.course IS NULL)"
+            staff_params.append(hod_course)
+        staff_sql += " GROUP BY u.id ORDER BY u.name ASC"
+        s_rows = db.execute(staff_sql, staff_params).fetchall()
+        branch_analysis['staff_workload'] = [{
+            'id': s['id'],
+            'name': s['name'],
+            'email': s['email'],
+            'designation': s['designation'] or 'Department Staff Resolver',
+            'assigned': s['assigned'] or 0,
+            'resolved': s['resolved'] or 0,
+            'pending': s['pending'] or 0,
+            'solved_percent': round(((s['resolved'] or 0) / s['assigned'] * 100), 1) if s['assigned'] else 0
+        } for s in s_rows]
+
+        # Single-query summary
+        sum_row = db.execute(f"""
+            SELECT
+                COUNT(q.id) as total,
+                SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as solved,
+                SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User') THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN q.assigned_staff_id IS NOT NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as assigned,
+                SUM(CASE WHEN q.assigned_staff_id IS NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as unassigned,
+                SUM(CASE WHEN q.status = 'New' THEN 1 ELSE 0 END) as new_q
+            FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause}
+        """, params).fetchone()
+        t_tot = sum_row['total'] or 0
+        s_sol = sum_row['solved'] or 0
+        summary = {
+            'total': t_tot,
+            'solved': s_sol,
+            'pending': sum_row['pending'] or 0,
+            'assigned': sum_row['assigned'] or 0,
+            'unassigned': sum_row['unassigned'] or 0,
+            'new': sum_row['new_q'] or 0,
+            'solved_percent': round((s_sol / t_tot * 100), 1) if t_tot > 0 else 0
+        }
+
+        year_rows = db.execute(f"""
+            SELECT 
+                CASE 
+                    WHEN u.role = 'faculty' THEN 'Faculty Submissions'
+                    WHEN u.year = 1 THEN '1st Year Students'
+                    WHEN u.year = 2 THEN '2nd Year Students'
+                    WHEN u.year = 3 THEN '3rd Year Students'
+                    WHEN u.year = 4 THEN '4th Year Students'
+                    ELSE 'General Campus'
+                END as year_label,
+                COUNT(q.id) as count
+            FROM queries q
+            LEFT JOIN users u ON q.user_id = u.id
+            {where_clause}
+            GROUP BY year_label
+            ORDER BY count DESC
+        """, params).fetchall()
+
+        cat_rows = db.execute(f"""
+            SELECT q.category, COUNT(q.id) as count
+            FROM queries q
+            LEFT JOIN users u ON q.user_id = u.id
+            {where_clause}
+            GROUP BY q.category
+            ORDER BY count DESC
+        """, params).fetchall()
+
+        status_rows = db.execute(f"""
+            SELECT q.status, COUNT(q.id) as count
+            FROM queries q
+            LEFT JOIN users u ON q.user_id = u.id
+            {where_clause}
+            GROUP BY q.status
+            ORDER BY count DESC
+        """, params).fetchall()
+
+        return jsonify({
+            'role': role,
+            'is_hod': True,
+            'is_ao': False,
+            'is_principal': False,
+            'is_admin': False,
+            'user_dept': hod_dept,
+            'user_course': user.get('course'),
+            'branch_analysis': branch_analysis,
+            'summary': summary,
+            'years': {'labels': [r['year_label'] for r in year_rows], 'data': [r['count'] for r in year_rows]},
+            'categories': {'labels': [r['category'] for r in cat_rows], 'data': [r['count'] for r in cat_rows]},
+            'statuses': {'labels': [r['status'] for r in status_rows], 'data': [r['count'] for r in status_rows]}
+        })
+
     # 1. Principal Desk Analysis (Category = 'Others' or department = 'Others')
     principal_analysis = compute_pillar("(q.category = 'Others' OR q.department = 'Others')", principal_topic_sql)
     prin_dept_rows = db.execute("""
@@ -2463,38 +2744,41 @@ def analytics_data():
     # 2. AO Desk Analysis (Category = 'Administrative' or department = 'Administrative')
     ao_analysis = compute_pillar("(q.category = 'Administrative' OR q.department = 'Administrative')", ao_topic_sql)
     
-    # AO Administrative Office Staff List with resolution statistics
+    # AO Administrative Office Staff List with resolution statistics — single aggregated query
     ao_staff_rows = db.execute("""
-        SELECT id, name, email, designation, role 
-        FROM users 
-        WHERE role IN ('office_staff', 'staff') AND (department = 'Administrative' OR department IS NULL) AND is_active = 1
-        ORDER BY name ASC
+        SELECT u.id, u.name, u.email, u.designation,
+               COUNT(q.id) as assigned,
+               SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as resolved,
+               SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User', 'Assigned') THEN 1 ELSE 0 END) as pending
+        FROM users u
+        LEFT JOIN queries q ON q.assigned_staff_id = u.id
+        WHERE u.role IN ('office_staff', 'staff') AND (u.department = 'Administrative' OR u.department IS NULL) AND u.is_active = 1
+        GROUP BY u.id
+        ORDER BY u.name ASC
     """).fetchall()
     if not ao_staff_rows:
         ao_staff_rows = db.execute("""
-            SELECT id, name, email, designation, role 
-            FROM users 
-            WHERE role IN ('office_staff', 'staff') AND is_active = 1
-            ORDER BY name ASC
+            SELECT u.id, u.name, u.email, u.designation,
+                   COUNT(q.id) as assigned,
+                   SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as resolved,
+                   SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User', 'Assigned') THEN 1 ELSE 0 END) as pending
+            FROM users u
+            LEFT JOIN queries q ON q.assigned_staff_id = u.id
+            WHERE u.role IN ('office_staff', 'staff') AND u.is_active = 1
+            GROUP BY u.id
+            ORDER BY u.name ASC
         """).fetchall()
         
-    ao_staff_workload = []
-    for s in ao_staff_rows:
-        sid = s['id']
-        t_asg = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (sid,)).fetchone()[0]
-        s_res = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved'", (sid,)).fetchone()[0]
-        p_act = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('In Progress', 'Waiting for User', 'Assigned')", (sid,)).fetchone()[0]
-        ao_staff_workload.append({
-            'id': sid,
-            'name': s['name'],
-            'email': s['email'],
-            'designation': s['designation'] or 'Office Staff / Administrative Staff',
-            'assigned': t_asg,
-            'resolved': s_res,
-            'pending': p_act,
-            'solved_percent': round((s_res / t_asg * 100), 1) if t_asg > 0 else 0
-        })
-    ao_analysis['staff_workload'] = ao_staff_workload
+    ao_analysis['staff_workload'] = [{
+        'id': s['id'],
+        'name': s['name'],
+        'email': s['email'],
+        'designation': s['designation'] or 'Office Staff / Administrative Staff',
+        'assigned': s['assigned'] or 0,
+        'resolved': s['resolved'] or 0,
+        'pending': s['pending'] or 0,
+        'solved_percent': round(((s['resolved'] or 0) / s['assigned'] * 100), 1) if s['assigned'] else 0
+    } for s in ao_staff_rows]
 
     # 3. HODs Academic Analysis (Category = 'Academics' or academic branches)
     hod_analysis = compute_pillar("(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others'))", hod_topic_sql)
@@ -2519,7 +2803,7 @@ def analytics_data():
     """).fetchall()
     hod_analysis['degrees'] = {'labels': [r['degree_name'] for r in hod_deg_rows], 'data': [r['count'] for r in hod_deg_rows]}
 
-    # HOD Table Performance Summary
+    # HOD Table Performance Summary — single aggregation per HOD
     hod_users = db.execute("""
         SELECT id, name, email, role, level, course, department, designation 
         FROM users 
@@ -2537,10 +2821,18 @@ def analytics_data():
             cond = "(q.department = ? OR ? = 'All')"
             h_params = [h_dept, h_dept]
             
-        t_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cond}", h_params).fetchone()[0]
-        s_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cond} AND status = 'Resolved'", h_params).fetchone()[0]
-        p_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cond} AND status IN ('In Progress', 'Waiting for User', 'Assigned')", h_params).fetchone()[0]
-        u_q = db.execute(f"SELECT COUNT(*) FROM queries q WHERE {cond} AND assigned_staff_id IS NULL AND status != 'Resolved'", h_params).fetchone()[0]
+        h_stat = db.execute(f"""
+            SELECT
+                COUNT(q.id) as total,
+                SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as solved,
+                SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User', 'Assigned') THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN q.assigned_staff_id IS NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as unassigned
+            FROM queries q WHERE {cond}
+        """, h_params).fetchone()
+        t_q = h_stat['total'] or 0
+        s_q = h_stat['solved'] or 0
+        p_q = h_stat['pending'] or 0
+        u_q = h_stat['unassigned'] or 0
         
         hod_table.append({
             'id': h['id'],
@@ -2561,35 +2853,19 @@ def analytics_data():
     # Scoped where clause based on user role
     where_clause = ""
     params = []
-    if is_hod and hod_dept:
-        if user.get('course'):
-            where_clause = "WHERE (q.department = ? OR u.department = ?) AND (q.course = ? OR u.course = ? OR q.course IS NULL)"
-            params = [hod_dept, hod_dept, user['course'], user['course']]
-        else:
-            where_clause = "WHERE (q.department = ? OR u.department = ?)"
-            params = [hod_dept, hod_dept]
-    elif is_ao:
+    if is_ao:
         where_clause = "WHERE (q.department = 'Administrative' OR q.category = 'Administrative')"
         params = []
         
     # Queries by Department / Branch (Campus Overview)
-    if is_hod:
-        dept_rows = db.execute(f"""
-            SELECT COALESCE(u.department, q.department, ?) as dept_name, COUNT(q.id) as count
-            FROM queries q
-            LEFT JOIN users u ON q.user_id = u.id
-            {where_clause}
-            GROUP BY dept_name
-        """, (hod_dept, *params)).fetchall()
-    else:
-        dept_rows = db.execute(f"""
-            SELECT COALESCE(u.department, q.department, 'General Campus') as dept_name, COUNT(q.id) as count
-            FROM queries q
-            LEFT JOIN users u ON q.user_id = u.id
-            {where_clause}
-            GROUP BY dept_name
-            ORDER BY count DESC
-        """, params).fetchall()
+    dept_rows = db.execute(f"""
+        SELECT COALESCE(u.department, q.department, 'General Campus') as dept_name, COUNT(q.id) as count
+        FROM queries q
+        LEFT JOIN users u ON q.user_id = u.id
+        {where_clause}
+        GROUP BY dept_name
+        ORDER BY count DESC
+    """, params).fetchall()
 
     # Queries by Student Year of Study (Campus Overview)
     year_rows = db.execute(f"""
@@ -2669,62 +2945,30 @@ def analytics_data():
         ORDER BY count DESC
     """, params).fetchall()
     
-    # Branch-specific analysis for logged in HOD
+    # Branch-specific analysis (None for central admin/principal/AO)
     branch_analysis = None
-    if is_hod:
-        hod_course = user['course'] or 'B.Tech'
-        if hod_course:
-            b_cond = f"(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others')) AND (q.department = '{hod_dept}' OR q.department IS NULL) AND (q.course = '{hod_course}' OR q.course IS NULL)"
-        else:
-            b_cond = f"(q.category = 'Academics' OR q.department NOT IN ('Administrative', 'Others')) AND (q.department = '{hod_dept}' OR q.department IS NULL)"
-            
-        branch_analysis = compute_pillar(b_cond, hod_topic_sql)
-        branch_analysis['branch_name'] = f"{hod_course} {hod_dept}".strip()
-        branch_analysis['course'] = hod_course
-        branch_analysis['department'] = hod_dept
-        
-        # Branch Staff List with resolution statistics
-        staff_sql = "SELECT id, name, email, designation, role FROM users WHERE role IN ('staff', 'faculty') AND (department = ? OR department IS NULL) AND is_active = 1"
-        staff_params = [hod_dept]
-        if hod_course:
-            staff_sql += " AND (course = ? OR course IS NULL)"
-            staff_params.append(hod_course)
-        staff_sql += " ORDER BY name ASC"
-        
-        staff_rows = db.execute(staff_sql, staff_params).fetchall()
-        staff_workload = []
-        for s in staff_rows:
-            sid = s['id']
-            t_asg = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ?", (sid,)).fetchone()[0]
-            s_res = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status = 'Resolved'", (sid,)).fetchone()[0]
-            p_act = db.execute("SELECT COUNT(*) FROM queries WHERE assigned_staff_id = ? AND status IN ('In Progress', 'Waiting for User', 'Assigned')", (sid,)).fetchone()[0]
-            staff_workload.append({
-                'id': sid,
-                'name': s['name'],
-                'email': s['email'],
-                'designation': s['designation'] or 'Department Staff Resolver',
-                'assigned': t_asg,
-                'resolved': s_res,
-                'pending': p_act,
-                'solved_percent': round((s_res / t_asg * 100), 1) if t_asg > 0 else 0
-            })
-        branch_analysis['staff_workload'] = staff_workload
 
-    # Summary Metrics (Campus Overview)
-    total_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause}", params).fetchone()[0]
-    solved_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause} {'AND' if where_clause else 'WHERE'} q.status = 'Resolved'", params).fetchone()[0]
-    pending_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause} {'AND' if where_clause else 'WHERE'} q.status IN ('In Progress', 'Waiting for User')", params).fetchone()[0]
-    assigned_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause} {'AND' if where_clause else 'WHERE'} q.assigned_staff_id IS NOT NULL AND q.status != 'Resolved'", params).fetchone()[0]
-    unassigned_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause} {'AND' if where_clause else 'WHERE'} q.assigned_staff_id IS NULL AND q.status != 'Resolved'", params).fetchone()[0]
-    new_q = db.execute(f"SELECT COUNT(q.id) FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause} {'AND' if where_clause else 'WHERE'} q.status = 'New'", params).fetchone()[0]
+    # Summary Metrics (Campus Overview) — single aggregated query
+    sum_row = db.execute(f"""
+        SELECT
+            COUNT(q.id) as total,
+            SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as solved,
+            SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User') THEN 1 ELSE 0 END) as pending,
+            SUM(CASE WHEN q.assigned_staff_id IS NOT NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as assigned,
+            SUM(CASE WHEN q.assigned_staff_id IS NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as unassigned,
+            SUM(CASE WHEN q.status = 'New' THEN 1 ELSE 0 END) as new_q
+        FROM queries q LEFT JOIN users u ON q.user_id = u.id {where_clause}
+    """, params).fetchone()
+    total_q = sum_row['total'] or 0
+    solved_q = sum_row['solved'] or 0
     
     summary = {
         'total': total_q,
         'solved': solved_q,
-        'pending': pending_q,
-        'assigned': assigned_q,
-        'unassigned': unassigned_q,
-        'new': new_q,
+        'pending': sum_row['pending'] or 0,
+        'assigned': sum_row['assigned'] or 0,
+        'unassigned': sum_row['unassigned'] or 0,
+        'new': sum_row['new_q'] or 0,
         'solved_percent': round((solved_q / total_q * 100), 1) if total_q > 0 else 0
     }
     
