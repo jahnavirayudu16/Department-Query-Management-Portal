@@ -217,29 +217,19 @@ def format_time_ago(dt_str):
 app.jinja_env.filters['timeago'] = format_time_ago
 
 def create_notification(user_id, query_id, title, message, notif_type='info'):
-    """Helper to store a notification in the database with explicit local timestamp and foreign key validation."""
+    """Helper to store a notification in the database with explicit local timestamp."""
     if not user_id:
         return
     try:
         db = get_db()
-        # Verify user exists
-        user_check = db.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not user_check:
-            return
-        # Verify query exists if query_id is given
-        if query_id:
-            query_check = db.execute("SELECT id FROM queries WHERE id = ?", (query_id,)).fetchone()
-            if not query_check:
-                query_id = None
-                
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         db.execute("""
             INSERT INTO notifications (user_id, query_id, title, message, type, is_read, created_at)
             VALUES (?, ?, ?, ?, ?, 0, ?)
         """, (user_id, query_id, title, message, notif_type, now_str))
-
     except Exception as e:
         print(f"Notification error bypassed: {e}")
+
 
 def ensure_demo_accounts(db):
     """Ensures demo accounts for all Faculty roles (Staff, HODs by degree, AO, Principal) and Students exist."""
@@ -463,9 +453,15 @@ def logout():
 def index():
     """Landing Page with high-impact hero, live classifier demo, and college stats."""
     db = get_db()
-    total_queries = db.execute('SELECT COUNT(*) as c FROM queries').fetchone()['c']
-    resolved_queries = db.execute("SELECT COUNT(*) as c FROM queries WHERE status = 'Resolved'").fetchone()['c']
-    departments_count = db.execute('SELECT COUNT(*) as c FROM departments').fetchone()['c']
+    row = db.execute("""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved
+        FROM queries
+    """).fetchone()
+    total_queries = row['total'] or 0
+    resolved_queries = row['resolved'] or 0
+    departments_count = len(Config.DEPARTMENTS)
     
     # Calculate avg response time across system
     avg_minutes = 12
@@ -476,6 +472,7 @@ def index():
         departments_count=departments_count,
         avg_minutes=avg_minutes
     )
+
 
 @app.route('/dashboard')
 @login_required
