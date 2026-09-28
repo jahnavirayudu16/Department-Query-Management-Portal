@@ -122,6 +122,22 @@
         {% endif %}
       </tbody>
     </table>
+    {% if total_pages and total_pages > 1 %}
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1.25rem; background: var(--bg-surface); border-top: 1px solid var(--border-color); font-size: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+      <span style="color: var(--text-muted);">
+        Showing page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong> ({{ total_items }} total users)
+      </span>
+      <div style="display: flex; gap: 0.4rem; align-items: center;">
+        {% if page > 1 %}
+        <a href="?{% for key, value in request.args.items() if key != 'page' %}{{ key }}={{ value }}&{% endfor %}page={{ page - 1 }}" class="btn btn-secondary btn-sm" style="padding: 0.35rem 0.75rem;">&laquo; Previous</a>
+        {% endif %}
+        <span style="font-weight: 700; padding: 0.35rem 0.6rem; color: var(--text-main);">Page {{ page }}</span>
+        {% if page < total_pages %}
+        <a href="?{% for key, value in request.args.items() if key != 'page' %}{{ key }}={{ value }}&{% endfor %}page={{ page + 1 }}" class="btn btn-secondary btn-sm" style="padding: 0.35rem 0.75rem;">Next &raquo;</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 
 </div>

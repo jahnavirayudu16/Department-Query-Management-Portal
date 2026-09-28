@@ -198,6 +198,8 @@ def check_and_migrate_db(db_conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_unread_created ON notifications(user_id, is_read, created_at DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_role_dept ON users(role, is_active, department)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_query_created ON audit_logs(query_id, created_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_admin_hod_pair ON admin_hod_messages(sender_id, receiver_id, created_at)")
             
         db_conn.commit()
     except Exception as e:

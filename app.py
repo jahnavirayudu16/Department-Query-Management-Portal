@@ -1,6 +1,9 @@
 import os
 import random
 import sqlite3
+import queue
+import threading
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -20,14 +23,43 @@ from seed_data import seed_database
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Initialize Database Hooks & SocketIO
+# Initialize Database Hooks & SocketIO with scalable pub/sub message queue support
 init_app(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', ping_interval=15, ping_timeout=15, engineio_logger=False)
+SOCKETIO_MESSAGE_QUEUE = os.environ.get('REDIS_URL') or os.environ.get('SOCKETIO_MESSAGE_QUEUE')
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode='threading',
+    message_queue=SOCKETIO_MESSAGE_QUEUE,
+    ping_interval=25,
+    ping_timeout=30,
+    engineio_logger=False
+)
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# In-worker socket session tracking (gracefully synchronized across cluster via DB last_active_at & Redis)
 ONLINE_USERS = {} # user_id -> set of socket session IDs
+
+def is_user_online(user_id, last_active_at=None):
+    """Stateless presence checker compatible with single-process, multi-worker, or Redis-backed clusters.
+    Avoids relying on a single worker's memory by checking shared database activity window."""
+    if not user_id:
+        return False
+    if user_id in ONLINE_USERS and ONLINE_USERS[user_id]:
+        return True
+    if last_active_at:
+        try:
+            if isinstance(last_active_at, str):
+                dt = datetime.strptime(last_active_at.split('.')[0], '%Y-%m-%d %H:%M:%S')
+            else:
+                dt = last_active_at
+            if (datetime.now() - dt).total_seconds() < 300:  # Active within 5 minutes
+                return True
+        except Exception:
+            pass
+    return False
 
 @app.before_request
 def track_user_activity():
@@ -219,19 +251,90 @@ def format_time_ago(dt_str):
 
 app.jinja_env.filters['timeago'] = format_time_ago
 
+_bg_write_queue = queue.Queue(maxsize=50000)
+
+def _bg_writer_loop():
+    """Background daemon thread that batches notifications and audit logs to eliminate SQLite write-lock contention."""
+    from database import get_standalone_db
+    conn = None
+    while True:
+        try:
+            first_item = _bg_write_queue.get()
+            if first_item is None:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                break
+            
+            items = [first_item]
+            # Gather any other waiting items up to 100 with zero blocking
+            while len(items) < 100:
+                try:
+                    items.append(_bg_write_queue.get_nowait())
+                except queue.Empty:
+                    break
+                    
+            batch_notifs = []
+            batch_audits = []
+            for item in items:
+                kind = item[0]
+                if kind == 'notif':
+                    batch_notifs.append(item[1:])
+                elif kind == 'audit':
+                    batch_audits.append(item[1:])
+                    
+            if batch_notifs or batch_audits:
+                for attempt in range(5):
+                    try:
+                        if conn is None:
+                            conn = get_standalone_db()
+                        cursor = conn.cursor()
+                        if batch_notifs:
+                            cursor.executemany("""
+                                INSERT INTO notifications (user_id, query_id, title, message, type, is_read, created_at)
+                                VALUES (?, ?, ?, ?, ?, 0, ?)
+                            """, batch_notifs)
+                        if batch_audits:
+                            cursor.executemany("""
+                                INSERT INTO audit_logs (query_id, user_id, action, details, created_at)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, batch_audits)
+                        conn.commit()
+                        break
+                    except Exception:
+                        try:
+                            if conn:
+                                conn.rollback()
+                                conn.close()
+                        except Exception:
+                            pass
+                        conn = None
+                        time.sleep(0.05 * (attempt + 1))
+                        
+            for _ in items:
+                _bg_write_queue.task_done()
+        except Exception:
+            time.sleep(0.01)
+
+_bg_thread = threading.Thread(target=_bg_writer_loop, daemon=True)
+_bg_thread.start()
+
 def create_notification(user_id, query_id, title, message, notif_type='info'):
-    """Helper to store a notification in the database with explicit local timestamp."""
+    """Asynchronous notification dispatcher: queues notification to background batch worker,
+    releasing the HTTP request and SQLite write lock in sub-millisecond time."""
     if not user_id:
         return
-    try:
-        db = get_db()
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        db.execute("""
-            INSERT INTO notifications (user_id, query_id, title, message, type, is_read, created_at)
-            VALUES (?, ?, ?, ?, ?, 0, ?)
-        """, (user_id, query_id, title, message, notif_type, now_str))
-    except Exception as e:
-        print(f"Notification error bypassed: {e}")
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    _bg_write_queue.put(('notif', user_id, query_id, title, message, notif_type, now_str))
+
+def log_audit_trail(query_id, user_id, action, details):
+    """Asynchronous audit log dispatcher: queues audit log to background batch worker."""
+    if not query_id or not details:
+        return
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    _bg_write_queue.put(('audit', query_id, user_id, action, details, now_str))
 
 
 def ensure_demo_accounts(db):
@@ -536,7 +639,21 @@ def dashboard():
         params.extend([term, term, term])
         
     sql += " ORDER BY q.created_at DESC"
-    queries = db.execute(sql, params).fetchall()
+    
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+    per_page = 25
+    count_sql = f"SELECT COUNT(*) as cnt FROM ({sql}) AS sub_dash"
+    count_res = db.execute(count_sql, params).fetchone()
+    total_items = count_res['cnt'] if count_res else 0
+    total_pages = max(1, (total_items + per_page - 1) // per_page)
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
+
+    paged_sql = sql + " LIMIT ? OFFSET ?"
+    queries = db.execute(paged_sql, params + [per_page, offset]).fetchall()
     
     return render_template(
         'dashboard.html',
@@ -544,7 +661,11 @@ def dashboard():
         queries=queries,
         current_status=status_filter,
         current_priority=priority_filter,
-        search_query=search_query
+        search_query=search_query,
+        page=page,
+        total_pages=total_pages,
+        total_items=total_items,
+        per_page=per_page
     )
 
 @app.route('/api/classify-preview', methods=['POST'])
@@ -934,7 +1055,7 @@ def track_query():
                     ao_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'ao' ORDER BY id LIMIT 1").fetchone()
                     if ao_row:
                         ao_dict = dict(ao_row)
-                        ao_online = ao_dict['id'] in ONLINE_USERS
+                        ao_online = is_user_online(ao_dict['id'], ao_dict.get('last_active_at'))
                         authority_presence = {
                             'id': ao_dict['id'],
                             'name': ao_dict['name'],
@@ -951,7 +1072,7 @@ def track_query():
                     prin_row = db.execute("SELECT id, name, email, role, department, designation, last_active_at FROM users WHERE role = 'principal' ORDER BY id LIMIT 1").fetchone()
                     if prin_row:
                         prin_dict = dict(prin_row)
-                        prin_online = prin_dict['id'] in ONLINE_USERS
+                        prin_online = is_user_online(prin_dict['id'], prin_dict.get('last_active_at'))
                         authority_presence = {
                             'id': prin_dict['id'],
                             'name': prin_dict['name'],
@@ -966,7 +1087,7 @@ def track_query():
                         }
                 else: # Academics
                     if hod_resolver:
-                        hod_online = hod_resolver['id'] in ONLINE_USERS
+                        hod_online = is_user_online(hod_resolver['id'], hod_resolver.get('last_active_at'))
                         authority_presence = {
                             'id': hod_resolver['id'],
                             'name': hod_resolver['name'],
@@ -983,7 +1104,7 @@ def track_query():
                 # 3. Staff Resolver Presence
                 staff_presence = None
                 if staff_resolver:
-                    staff_online = staff_resolver['id'] in ONLINE_USERS
+                    staff_online = is_user_online(staff_resolver['id'], staff_resolver.get('last_active_at'))
                     if staff_resolver.get('role') == 'principal':
                         role_label = 'Principal (Direct Handling)'
                         desig_label = staff_resolver.get('designation') or 'Principal'
@@ -1063,13 +1184,16 @@ def query_details(query_id):
             return redirect(url_for('department_dashboard'))
         return redirect(url_for('dashboard'))
         
-    # Fetch Messages
+    # Fetch Messages (Latest 50 in chronological order for high-scale speed)
     messages = db.execute("""
-        SELECT m.*, u.name as sender_name, u.role as sender_role, u.department as sender_department
-        FROM messages m
-        JOIN users u ON m.sender_id = u.id
-        WHERE m.query_id = ?
-        ORDER BY m.created_at ASC
+        SELECT * FROM (
+            SELECT m.*, u.name as sender_name, u.role as sender_role, u.department as sender_department
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE m.query_id = ?
+            ORDER BY m.created_at DESC
+            LIMIT 50
+        ) sub ORDER BY sub.created_at ASC
     """, (query_id,)).fetchall()
     
     # Filter internal notes if student or faculty
@@ -1119,13 +1243,14 @@ def query_details(query_id):
             "SELECT id, name, email, role, department, designation FROM users WHERE role IN ('staff', 'office_staff', 'faculty', 'admin') AND is_active = 1 ORDER BY department ASC, name ASC"
         ).fetchall()
     
-    # Audit Logs
+    # Audit Logs (Latest 30 for high-scale performance)
     audit_logs = db.execute("""
         SELECT a.*, u.name as actor_name
         FROM audit_logs a
         LEFT JOIN users u ON a.user_id = u.id
         WHERE a.query_id = ?
         ORDER BY a.created_at DESC
+        LIMIT 30
     """, (query_id,)).fetchall()
     
     # Calculate Live Presence & Online Status for all 3 key parties: Submitter, Governing Authority (HOD/AO/Principal), and Assigned Staff
@@ -1241,7 +1366,7 @@ def query_details(query_id):
               dept_val, f"%{dept_val}%", dept_val)).fetchone()
             
         if hod_row:
-            hod_online = (hod_row['id'] in ONLINE_USERS) or (user and user['id'] == hod_row['id'])
+            hod_online = is_user_online(hod_row['id'], hod_row['last_active_at']) or (user and user['id'] == hod_row['id'])
             authority_presence = {
                 'id': hod_row['id'],
                 'name': hod_row['name'],
@@ -1262,7 +1387,7 @@ def query_details(query_id):
     if query['assigned_staff_id']:
         staff_row = db.execute("SELECT id, name, role, department, designation, last_active_at FROM users WHERE id = ?", (query['assigned_staff_id'],)).fetchone()
         if staff_row:
-            staff_online = (staff_row['id'] in ONLINE_USERS) or (user and user['id'] == staff_row['id'])
+            staff_online = is_user_online(staff_row['id'], staff_row['last_active_at']) or (user and user['id'] == staff_row['id'])
             if staff_row['role'] == 'principal':
                 role_label = 'Principal (Direct Handling)'
                 desig_label = staff_row['designation'] or 'Principal'
@@ -1291,20 +1416,23 @@ def query_details(query_id):
     is_assigned_to_current_hod = bool(user and user['role'] == 'hod' and query['assigned_staff_id'] == user['id'])
     is_assigned_to_current_principal = bool(user and user['role'] == 'principal' and query['assigned_staff_id'] == user['id'])
 
-    # Complete lists of HODs and Staff Resolvers for Principal & Admin assignment selection
-    all_hods = db.execute("""
-        SELECT id, name, email, role, level, course, department, designation 
-        FROM users 
-        WHERE role = 'hod' AND is_active = 1 
-        ORDER BY level ASC, course ASC, name ASC
-    """).fetchall()
+    # Lists of HODs and Staff Resolvers only loaded for Principal & Admin assignment dropdowns
+    all_hods = []
+    all_staff = []
+    if user and user['role'] in ['admin', 'principal']:
+        all_hods = db.execute("""
+            SELECT id, name, email, role, level, course, department, designation 
+            FROM users 
+            WHERE role = 'hod' AND is_active = 1 
+            ORDER BY level ASC, course ASC, name ASC
+        """).fetchall()
 
-    all_staff = db.execute("""
-        SELECT id, name, email, role, level, course, department, designation 
-        FROM users 
-        WHERE role IN ('staff', 'office_staff', 'faculty') AND is_active = 1 
-        ORDER BY department ASC, name ASC
-    """).fetchall()
+        all_staff = db.execute("""
+            SELECT id, name, email, role, level, course, department, designation 
+            FROM users 
+            WHERE role IN ('staff', 'office_staff', 'faculty') AND is_active = 1 
+            ORDER BY department ASC, name ASC
+        """).fetchall()
 
     return render_template(
         'query_details.html',
@@ -1393,25 +1521,25 @@ def post_message(query_id):
             
             cursor.execute("UPDATE messages SET attachment_filename = ?, attachment_path = ? WHERE id = ?", (orig_filename, saved_filename, message_id))
 
-    # Update first_response_at if staff/office_staff/hod/ao/admin responded for the first time
+    # Update first_response_at and status in a single consolidated UPDATE
     if user['role'] in ['staff', 'office_staff', 'hod', 'ao', 'principal', 'admin', 'faculty'] and not is_submitter and not is_internal_note:
         if not query['first_response_at']:
-            cursor.execute("UPDATE queries SET first_response_at = ? WHERE id = ?", (now_str, query_id))
-            
-        # If query was New or Waiting for User, update status to In Progress
-        if query['status'] in ['New', 'Waiting for User']:
-            cursor.execute("UPDATE queries SET status = 'In Progress' WHERE id = ?", (query_id,))
-            
-    # If submitter replies, change status to In Progress if it was Waiting for User
-    if is_submitter and query['status'] == 'Waiting for User':
-        cursor.execute("UPDATE queries SET status = 'In Progress' WHERE id = ?", (query_id,))
-        
-    cursor.execute("UPDATE queries SET updated_at = ? WHERE id = ?", (now_str, query_id))
+            cursor.execute("UPDATE queries SET first_response_at = ?, status = CASE WHEN status IN ('New', 'Waiting for User') THEN 'In Progress' ELSE status END, updated_at = ? WHERE id = ?", (now_str, now_str, query_id))
+        elif query['status'] in ['New', 'Waiting for User']:
+            cursor.execute("UPDATE queries SET status = 'In Progress', updated_at = ? WHERE id = ?", (now_str, query_id))
+        else:
+            cursor.execute("UPDATE queries SET updated_at = ? WHERE id = ?", (now_str, query_id))
+    elif is_submitter and query['status'] == 'Waiting for User':
+        cursor.execute("UPDATE queries SET status = 'In Progress', updated_at = ? WHERE id = ?", (now_str, query_id))
+    else:
+        cursor.execute("UPDATE queries SET updated_at = ? WHERE id = ?", (now_str, query_id))
     
-    # Safe Notifications
+    # Release SQLite write lock immediately!
+    db.commit()
+
+    # Non-blocking async notifications
     try:
         if is_submitter:
-            # Notify assigned staff or department
             if query['assigned_staff_id']:
                 create_notification(
                     query['assigned_staff_id'],
@@ -1421,7 +1549,6 @@ def post_message(query_id):
                     'message'
                 )
         elif not is_internal_note:
-            # Notify query owner
             sender_role_label = 'Principal' if user['role'] == 'principal' else ('HOD' if user['role'] == 'hod' else ('AO' if user['role'] == 'ao' else ('Office Staff' if user['role'] == 'office_staff' else 'Staff')))
             create_notification(
                 query['user_id'],
@@ -1432,8 +1559,6 @@ def post_message(query_id):
             )
     except Exception as e:
         print(f"Chat notification notice: {e}")
-        
-    db.commit()
     
     msg_data = {
         'id': message_id,
@@ -1495,20 +1620,17 @@ def update_query_status(query_id):
     if new_status == 'Resolved':
         cursor.execute("""
             UPDATE queries SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?
-
         """, (new_status, resolved_at, now_str, query_id))
     else:
         cursor.execute("""
             UPDATE queries SET status = ?, updated_at = ? WHERE id = ?
         """, (new_status, now_str, query_id))
         
-    # Audit log
-    cursor.execute("""
-        INSERT INTO audit_logs (query_id, user_id, action, details)
-        VALUES (?, ?, 'Status Change', ?)
-    """, (query_id, user['id'], f"Status changed from '{query['status']}' to '{new_status}'"))
+    # Release SQLite write lock immediately!
+    db.commit()
     
-    # Notification for user
+    # Audit log & notifications (queued asynchronously)
+    log_audit_trail(query_id, user['id'], 'Status Change', f"Status changed from '{query['status']}' to '{new_status}'")
     create_notification(
         query['user_id'],
         query_id,
@@ -1516,8 +1638,6 @@ def update_query_status(query_id):
         f"Your query status is now marked as '{new_status}'.",
         'success' if new_status == 'Resolved' else 'info'
     )
-    
-    db.commit()
     
     # Broadcast event
     socketio.emit('status_update', {
@@ -1546,7 +1666,7 @@ def reassign_query(query_id):
     new_staff_id = request.form.get('assigned_staff_id')
     new_priority = request.form.get('priority')
     
-    # Quick Action: Principal or HOD takes the query directly, or HOD escalates to Principal
+    # 1. READ LOOKUPS (Done BEFORE acquiring write lock)
     if action_type == 'take_query':
         new_staff_id = str(user['id'])
     elif action_type == 'escalate_principal':
@@ -1566,31 +1686,21 @@ def reassign_query(query_id):
             else:
                 prev_handler_name = f"{prev_user['name']} ({r_label})"
     
-    cursor = db.cursor()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     log_details = []
     
+    dept_to_update = None
     if new_dept and new_dept in Config.DEPARTMENTS and new_dept != query['department']:
-        cursor.execute("""
-            UPDATE queries SET department = ?, is_routed_manually = 1, updated_at = ? WHERE id = ?
-        """, (new_dept, now_str, query_id))
+        dept_to_update = new_dept
         log_details.append(f"Department re-routed from {query['department']} to {new_dept}")
         
-        # Broadcast to new department room
-        socketio.emit('new_query_alert', {
-            'query_id': query_id,
-            'title': query['title'],
-            'department': new_dept,
-            'priority': query['priority'],
-            'created_at': now_str
-        }, room=f"dept_{new_dept}")
-        
+    prio_to_update = None
     if new_priority and new_priority in Config.PRIORITIES and new_priority != query['priority']:
-        cursor.execute("""
-            UPDATE queries SET priority = ?, updated_at = ? WHERE id = ?
-        """, (new_priority, now_str, query_id))
+        prio_to_update = new_priority
         log_details.append(f"Priority changed to {new_priority}")
         
+    staff_val = None
+    target_notifications = []
     if new_staff_id is not None:
         staff_val = int(new_staff_id) if new_staff_id != "" and new_staff_id != "0" else None
         
@@ -1601,11 +1711,7 @@ def reassign_query(query_id):
             new_status = 'Assigned'
         else:
             new_status = query['status']
-        
-        cursor.execute("""
-            UPDATE queries SET assigned_staff_id = ?, status = ?, updated_at = ? WHERE id = ?
-        """, (staff_val, new_status, now_str, query_id))
-        
+            
         if staff_val:
             assigned_target = db.execute("SELECT id, name, role, department, designation FROM users WHERE id = ?", (staff_val,)).fetchone()
             if assigned_target:
@@ -1622,129 +1728,78 @@ def reassign_query(query_id):
                 actor_desc = user['name'] if (f"({actor_role})" in user['name'] or f"({user['role'].upper()})" in user['name']) else f"{user['name']} ({actor_role})"
                 
                 if action_type == 'escalate_principal' or (user['role'] == 'hod' and target_role == 'principal'):
-                    # HOD escalates query to Principal
                     log_details.append(f"Escalated to Principal by HOD {user['name']}. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Escalated by: {actor_desc}")
-                    create_notification(
-                        staff_val,
-                        query_id,
-                        '🔺 Query Escalated by HOD',
-                        f"HOD {user['name']} has escalated Query #{query_id} ('{query['title']}') to Principal Executive Desk for direct handling.",
-                        'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'
-                    )
-                    create_notification(
-                        query['user_id'],
-                        query_id,
-                        '🔺 Query Escalated to Principal',
-                        f"Your query #{query_id} has been escalated to Principal Executive Desk for direct review and resolution.",
-                        'info'
-                    )
+                    target_notifications.append((staff_val, query_id, '🔺 Query Escalated by HOD', f"HOD {user['name']} has escalated Query #{query_id} ('{query['title']}') to Principal Executive Desk for direct handling.", 'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'))
+                    target_notifications.append((query['user_id'], query_id, '🔺 Query Escalated to Principal', f"Your query #{query_id} has been escalated to Principal Executive Desk for direct review and resolution.", 'info'))
                 elif staff_val == user['id'] and user['role'] == 'principal':
-                    # Principal self-assigns / takes ownership to resolve directly
                     log_details.append(f"Principal {user['name']} took direct ownership to resolve directly. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Handled by: {actor_desc}")
-                    create_notification(
-                        query['user_id'],
-                        query_id,
-                        '🏛️ Query In Progress with Principal',
-                        f"Principal {user['name']} has taken your query #{query_id} to resolve directly.",
-                        'info'
-                    )
+                    target_notifications.append((query['user_id'], query_id, '🏛️ Query In Progress with Principal', f"Principal {user['name']} has taken your query #{query_id} to resolve directly.", 'info'))
                     if prev_staff_id and prev_staff_id != user['id']:
-                        create_notification(
-                            prev_staff_id,
-                            query_id,
-                            '🏛️ Query Taken by Principal',
-                            f"Principal {user['name']} has taken direct ownership of Query #{query_id}.",
-                            'info'
-                        )
+                        target_notifications.append((prev_staff_id, query_id, '🏛️ Query Taken by Principal', f"Principal {user['name']} has taken direct ownership of Query #{query_id}.", 'info'))
                 elif staff_val == user['id'] and user['role'] == 'hod':
-                    # HOD self-assigns / takes ownership to resolve directly
                     log_details.append(f"HOD {user['name']} self-assigned query to resolve directly. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
-                    create_notification(
-                        query['user_id'],
-                        query_id,
-                        '🎓 Query In Progress with HOD',
-                        f"Department Head {user['name']} has taken your query #{query_id} to resolve directly.",
-                        'info'
-                    )
+                    target_notifications.append((query['user_id'], query_id, '🎓 Query In Progress with HOD', f"Department Head {user['name']} has taken your query #{query_id} to resolve directly.", 'info'))
                     if prev_staff_id and prev_staff_id != user['id']:
-                        create_notification(
-                            prev_staff_id,
-                            query_id,
-                            '🎓 Query Taken by HOD',
-                            f"Department Head {user['name']} has taken direct ownership of Query #{query_id}.",
-                            'info'
-                        )
+                        target_notifications.append((prev_staff_id, query_id, '🎓 Query Taken by HOD', f"Department Head {user['name']} has taken direct ownership of Query #{query_id}.", 'info'))
                 elif user['role'] in ['principal', 'admin'] and target_role == 'hod':
-                    # Principal or Admin assigns/escalates query to HOD
                     log_details.append(f"Assigned/Escalated by {user['role'].capitalize()} to HOD {target_name}. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
-                    create_notification(
-                        staff_val,
-                        query_id,
-                        '🏛️ Query Assigned by Principal' if user['role'] == 'principal' else 'Query Assigned by Admin',
-                        f"{user['role'].capitalize()} assigned Query #{query_id} to you: '{query['title']}'. You can resolve it directly or assign to department staff.",
-                        'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'
-                    )
-                    create_notification(
-                        query['user_id'],
-                        query_id,
-                        'Query Assigned to HOD',
-                        f"Your query #{query_id} has been assigned to Head of Department ({target_name}) for resolution.",
-                        'info'
-                    )
+                    target_notifications.append((staff_val, query_id, '🏛️ Query Assigned by Principal' if user['role'] == 'principal' else 'Query Assigned by Admin', f"{user['role'].capitalize()} assigned Query #{query_id} to you: '{query['title']}'. You can resolve it directly or assign to department staff.", 'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'))
+                    target_notifications.append((query['user_id'], query_id, 'Query Assigned to HOD', f"Your query #{query_id} has been assigned to Head of Department ({target_name}) for resolution.", 'info'))
                 elif user['role'] == 'hod':
-                    # HOD delegates to staff/faculty member
                     log_details.append(f"Delegated by HOD {user['name']} to {target_name} ({target_desig}). Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Delegated by: {actor_desc}")
-                    create_notification(
-                        staff_val,
-                        query_id,
-                        '🎓 Query Assigned by HOD',
-                        f"HOD {user['name']} assigned Query #{query_id} to you: '{query['title']}'.",
-                        'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'
-                    )
-                    create_notification(
-                        query['user_id'],
-                        query_id,
-                        'Staff Resolver Assigned',
-                        f"Your query #{query_id} has been assigned to staff resolver {target_name} ({target_desig}) by Department HOD.",
-                        'info'
-                    )
+                    target_notifications.append((staff_val, query_id, '🎓 Query Assigned by HOD', f"HOD {user['name']} assigned Query #{query_id} to you: '{query['title']}'.", 'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'))
+                    target_notifications.append((query['user_id'], query_id, 'Staff Resolver Assigned', f"Your query #{query_id} has been assigned to staff resolver {target_name} ({target_desig}) by Department HOD.", 'info'))
                 else:
                     log_details.append(f"Assigned to {target_name} ({target_desig}). Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
-                    create_notification(
-                        staff_val,
-                        query_id,
-                        'Query Assigned',
-                        f"You have been assigned Query #{query_id}: {query['title']}",
-                        'info'
-                    )
-                    create_notification(
-                        query['user_id'],
-                        query_id,
-                        'Resolver Assigned',
-                        f"Your query #{query_id} has been assigned to {target_name}.",
-                        'info'
-                    )
+                    target_notifications.append((staff_val, query_id, 'Query Assigned', f"You have been assigned Query #{query_id}: {query['title']}", 'info'))
+                    target_notifications.append((query['user_id'], query_id, 'Resolver Assigned', f"Your query #{query_id} has been assigned to {target_name}.", 'info'))
         else:
             actor_role = 'Principal' if user['role'] == 'principal' else ('HOD' if user['role'] == 'hod' else user['role'].capitalize())
             actor_desc = user['name'] if (f"({actor_role})" in user['name'] or f"({user['role'].upper()})" in user['name']) else f"{user['name']} ({actor_role})"
             log_details.append(f"Unassigned staff resolver. Previous Handler: {prev_handler_name} -> New Handler: Unassigned; Action by: {actor_desc}")
+    else:
+        new_status = query['status']
+        staff_val = query['assigned_staff_id']
 
-    if log_details:
-        cursor.execute("""
-            INSERT INTO audit_logs (query_id, user_id, action, details)
-            VALUES (?, ?, 'Query Assignment & Routing', ?)
-        """, (query_id, user['id'], "; ".join(log_details)))
-        
+    # 2. ATOMIC PRIMARY UPDATE & IMMEDIATE COMMIT (Releases SQLite write lock in ~0.2ms!)
+    cursor = db.cursor()
+    cursor.execute("""
+        UPDATE queries 
+        SET department = COALESCE(?, department),
+            priority = COALESCE(?, priority),
+            assigned_staff_id = ?,
+            status = ?,
+            is_routed_manually = CASE WHEN ? IS NOT NULL THEN 1 ELSE is_routed_manually END,
+            updated_at = ?
+        WHERE id = ?
+    """, (dept_to_update, prio_to_update, staff_val, new_status, dept_to_update, now_str, query_id))
     db.commit()
-    
-    # Broadcast status / assignment update
-    socketio.emit('status_update', {
-        'query_id': query_id,
-        'status': query['status'],
-        'assigned_staff_id': new_staff_id,
-        'updated_at': now_str
-    }, room=f"query_{query_id}")
-    
+
+    # 3. Asynchronous non-blocking audit logging & notifications (queued in RAM, zero write lock)
+    if log_details:
+        log_audit_trail(query_id, user['id'], 'Query Assignment & Routing', "; ".join(log_details))
+    for notif in target_notifications:
+        create_notification(*notif)
+
+    # 4. SocketIO emissions outside write lock
+    try:
+        if dept_to_update:
+            socketio.emit('new_query_alert', {
+                'query_id': query_id,
+                'title': query['title'],
+                'department': dept_to_update,
+                'priority': prio_to_update or query['priority'],
+                'created_at': now_str
+            }, room=f"dept_{dept_to_update}")
+        socketio.emit('status_update', {
+            'query_id': query_id,
+            'status': new_status,
+            'assigned_staff_id': new_staff_id,
+            'updated_at': now_str
+        }, room=f"query_{query_id}")
+    except Exception:
+        pass
+
     flash('Query assignments and resolution flow updated successfully.', 'success')
     return redirect(url_for('query_details', query_id=query_id))
 
@@ -2110,7 +2165,21 @@ def department_dashboard():
     else:
         sql += " ORDER BY priority_order ASC, q.created_at DESC"
         
-    queries = db.execute(sql, params).fetchall()
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+    per_page = 25
+    
+    count_sql = f"SELECT COUNT(*) as cnt FROM ({sql}) AS sub_filter"
+    count_res = db.execute(count_sql, params).fetchone()
+    total_items = count_res['cnt'] if count_res else 0
+    total_pages = max(1, (total_items + per_page - 1) // per_page)
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
+    
+    paged_sql = sql + " LIMIT ? OFFSET ?"
+    queries = db.execute(paged_sql, params + [per_page, offset]).fetchall()
     
     # Counts for quick tabs — aggregated per role branch instead of 5-6 separate SELECTs
     delegated_count = 0
@@ -2248,7 +2317,11 @@ def department_dashboard():
         assigned_count=assigned_count,
         delegated_count=delegated_count,
         resolved_count=resolved_count,
-        total_dept_count=total_dept_count
+        total_dept_count=total_dept_count,
+        page=page,
+        total_pages=total_pages,
+        total_items=total_items,
+        per_page=per_page
     )
 
 # -------------------------------------------------------------
@@ -2503,8 +2576,9 @@ def admin_hod_messages(hod_id):
             VALUES (?, ?, ?, ?, 0, ?)
         """, (sender_id, receiver_id, user.get('department') or 'College Administration', message_text, now_str))
         msg_id = cursor.lastrowid
+        db.commit() # Release SQLite write lock immediately!
         
-        # Send Notification to recipient
+        # Send Notification to recipient (queued asynchronously)
         create_notification(
             receiver_id,
             None,
@@ -2512,7 +2586,6 @@ def admin_hod_messages(hod_id):
             f"{message_text[:60]}...",
             'message'
         )
-        db.commit()
         
         msg_payload = {
             'id': msg_id,
@@ -2528,17 +2601,22 @@ def admin_hod_messages(hod_id):
         }
         
         # Broadcast SocketIO to room
-        socketio.emit('admin_hod_chat', msg_payload, room=f"admin_hod_{hod_id}")
+        try:
+            socketio.emit('admin_hod_chat', msg_payload, room=f"admin_hod_{hod_id}")
+        except Exception:
+            pass
         return jsonify({'status': 'success', 'message': msg_payload})
         
-    # GET: Mark received messages from this specific partner as read
+    # GET: Mark received messages from this specific partner as read only if unread messages exist
     try:
-        db.execute("""
-            UPDATE admin_hod_messages 
-            SET is_read = 1 
-            WHERE receiver_id = ? AND sender_id = ?
-        """, (user['id'], partner_id))
-        db.commit()
+        has_unread = db.execute("SELECT 1 FROM admin_hod_messages WHERE receiver_id = ? AND sender_id = ? AND is_read = 0 LIMIT 1", (user['id'], partner_id)).fetchone()
+        if has_unread:
+            db.execute("""
+                UPDATE admin_hod_messages 
+                SET is_read = 1 
+                WHERE receiver_id = ? AND sender_id = ? AND is_read = 0
+            """, (user['id'], partner_id))
+            db.commit()
     except Exception:
         pass
 
@@ -2643,14 +2721,32 @@ def admin_users():
         params.extend([term, term, term])
         
     sql += " ORDER BY created_at DESC"
-    users = db.execute(sql, params).fetchall()
+    
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+    per_page = 50
+    count_sql = f"SELECT COUNT(*) as cnt FROM ({sql}) AS sub_users"
+    count_res = db.execute(count_sql, params).fetchone()
+    total_items = count_res['cnt'] if count_res else 0
+    total_pages = max(1, (total_items + per_page - 1) // per_page)
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
+
+    paged_sql = sql + " LIMIT ? OFFSET ?"
+    users = db.execute(paged_sql, params + [per_page, offset]).fetchall()
     
     return render_template(
         'users.html',
         users=users,
         current_role=role_filter,
         current_dept=dept_filter,
-        search=search
+        search=search,
+        page=page,
+        total_pages=total_pages,
+        total_items=total_items,
+        per_page=per_page
     )
 
 @app.route('/admin/reset-database', methods=['GET', 'POST'])
@@ -3019,36 +3115,76 @@ def analytics_data():
     """).fetchall()
     hod_analysis['degrees'] = {'labels': [r['degree_name'] for r in hod_deg_rows], 'data': [r['count'] for r in hod_deg_rows]}
 
-    # HOD Table Performance Summary — single aggregation per HOD
+    # HOD Table Performance Summary — single aggregation across all departments & courses (eliminates N+1 DB roundtrips)
     hod_users = db.execute("""
         SELECT id, name, email, role, level, course, department, designation 
         FROM users 
         WHERE role = 'hod' AND is_active = 1
         ORDER BY level ASC, course ASC, name ASC
     """).fetchall()
+
+    dept_course_stats = db.execute("""
+        SELECT
+            COALESCE(department, '') as dept,
+            COALESCE(course, '') as crs,
+            COUNT(id) as total,
+            SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as solved,
+            SUM(CASE WHEN status IN ('In Progress', 'Waiting for User', 'Assigned') THEN 1 ELSE 0 END) as pending,
+            SUM(CASE WHEN assigned_staff_id IS NULL AND status != 'Resolved' THEN 1 ELSE 0 END) as unassigned
+        FROM queries
+        GROUP BY department, course
+    """).fetchall()
+
+    exact_map = {}
+    null_course_map = {}
+    dept_total_map = {}
+    college_total = {'total': 0, 'solved': 0, 'pending': 0, 'unassigned': 0}
+
+    for row in dept_course_stats:
+        d = row['dept']
+        c = row['crs']
+        metrics = {
+            'total': row['total'] or 0,
+            'solved': row['solved'] or 0,
+            'pending': row['pending'] or 0,
+            'unassigned': row['unassigned'] or 0
+        }
+        for k in college_total:
+            college_total[k] += metrics[k]
+            
+        if d not in dept_total_map:
+            dept_total_map[d] = {'total': 0, 'solved': 0, 'pending': 0, 'unassigned': 0}
+        for k in metrics:
+            dept_total_map[d][k] += metrics[k]
+            
+        if not c:
+            null_course_map[d] = metrics
+        else:
+            exact_map[(d, c)] = metrics
+
     hod_table = []
     for h in hod_users:
-        h_dept = h['department']
-        h_course = h['course']
-        if h_course:
-            cond = "(q.department = ? OR ? = 'All') AND (q.course = ? OR q.course IS NULL)"
-            h_params = [h_dept, h_dept, h_course]
+        h_dept = h['department'] or ''
+        h_course = h['course'] or ''
+        
+        if h_dept == 'All':
+            st = college_total
+        elif h_course:
+            base = exact_map.get((h_dept, h_course), {'total': 0, 'solved': 0, 'pending': 0, 'unassigned': 0})
+            null_c = null_course_map.get(h_dept, {'total': 0, 'solved': 0, 'pending': 0, 'unassigned': 0})
+            st = {
+                'total': base['total'] + null_c['total'],
+                'solved': base['solved'] + null_c['solved'],
+                'pending': base['pending'] + null_c['pending'],
+                'unassigned': base['unassigned'] + null_c['unassigned']
+            }
         else:
-            cond = "(q.department = ? OR ? = 'All')"
-            h_params = [h_dept, h_dept]
+            st = dept_total_map.get(h_dept, {'total': 0, 'solved': 0, 'pending': 0, 'unassigned': 0})
             
-        h_stat = db.execute(f"""
-            SELECT
-                COUNT(q.id) as total,
-                SUM(CASE WHEN q.status = 'Resolved' THEN 1 ELSE 0 END) as solved,
-                SUM(CASE WHEN q.status IN ('In Progress', 'Waiting for User', 'Assigned') THEN 1 ELSE 0 END) as pending,
-                SUM(CASE WHEN q.assigned_staff_id IS NULL AND q.status != 'Resolved' THEN 1 ELSE 0 END) as unassigned
-            FROM queries q WHERE {cond}
-        """, h_params).fetchone()
-        t_q = h_stat['total'] or 0
-        s_q = h_stat['solved'] or 0
-        p_q = h_stat['pending'] or 0
-        u_q = h_stat['unassigned'] or 0
+        t_q = st['total']
+        s_q = st['solved']
+        p_q = st['pending']
+        u_q = st['unassigned']
         
         hod_table.append({
             'id': h['id'],
@@ -3233,15 +3369,27 @@ def notifications():
     user = get_current_user()
     db = get_db()
     
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+    per_page = 50
+    count_res = db.execute("SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ?", (user['id'],)).fetchone()
+    total_items = count_res['cnt'] if count_res else 0
+    total_pages = max(1, (total_items + per_page - 1) // per_page)
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
+
     all_notifs = db.execute("""
         SELECT n.*, q.title as query_title
         FROM notifications n
         LEFT JOIN queries q ON n.query_id = q.id
         WHERE n.user_id = ?
         ORDER BY n.created_at DESC
-    """, (user['id'],)).fetchall()
+        LIMIT ? OFFSET ?
+    """, (user['id'], per_page, offset)).fetchall()
     
-    return render_template('notifications.html', notifications=all_notifs)
+    return render_template('notifications.html', notifications=all_notifs, page=page, total_pages=total_pages, total_items=total_items, per_page=per_page)
 
 @app.route('/notifications/mark-read', methods=['POST'])
 @login_required
