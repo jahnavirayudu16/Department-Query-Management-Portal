@@ -1669,10 +1669,6 @@ def reassign_query(query_id):
     # 1. READ LOOKUPS (Done BEFORE acquiring write lock)
     if action_type == 'take_query':
         new_staff_id = str(user['id'])
-    elif action_type == 'escalate_principal':
-        prin_row = db.execute("SELECT id, name, role FROM users WHERE role = 'principal' AND is_active = 1 ORDER BY id ASC LIMIT 1").fetchone()
-        if prin_row:
-            new_staff_id = str(prin_row['id'])
 
     # Track previous handler for clear audit trails
     prev_staff_id = query['assigned_staff_id']
@@ -1705,7 +1701,7 @@ def reassign_query(query_id):
         staff_val = int(new_staff_id) if new_staff_id != "" and new_staff_id != "0" else None
         
         # Determine status update
-        if action_type in ['take_query', 'escalate_principal'] or (staff_val == user['id'] and user['role'] in ['hod', 'principal']):
+        if action_type == 'take_query' or (staff_val == user['id'] and user['role'] in ['hod', 'principal']):
             new_status = 'In Progress'
         elif query['status'] == 'New':
             new_status = 'Assigned'
@@ -1715,6 +1711,11 @@ def reassign_query(query_id):
         if staff_val:
             assigned_target = db.execute("SELECT id, name, role, department, designation FROM users WHERE id = ?", (staff_val,)).fetchone()
             if assigned_target:
+                # Institutional hierarchy rule: HODs cannot delegate/assign queries to the Principal or Admin
+                if user['role'] == 'hod' and assigned_target['role'] in ['principal', 'admin']:
+                    flash('Department Heads can only delegate queries to departmental staff or handle them directly.', 'danger')
+                    return redirect(url_for('query_details', query_id=query_id))
+
                 target_name = assigned_target['name']
                 target_role = assigned_target['role']
                 target_desig = assigned_target['designation'] or ('Principal' if target_role == 'principal' else ('Head of Department' if target_role == 'hod' else 'Staff'))
@@ -1727,11 +1728,7 @@ def reassign_query(query_id):
                 actor_role = 'Principal' if user['role'] == 'principal' else ('HOD' if user['role'] == 'hod' else user['role'].capitalize())
                 actor_desc = user['name'] if (f"({actor_role})" in user['name'] or f"({user['role'].upper()})" in user['name']) else f"{user['name']} ({actor_role})"
                 
-                if action_type == 'escalate_principal' or (user['role'] == 'hod' and target_role == 'principal'):
-                    log_details.append(f"Escalated to Principal by HOD {user['name']}. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Escalated by: {actor_desc}")
-                    target_notifications.append((staff_val, query_id, '🔺 Query Escalated by HOD', f"HOD {user['name']} has escalated Query #{query_id} ('{query['title']}') to Principal Executive Desk for direct handling.", 'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'))
-                    target_notifications.append((query['user_id'], query_id, '🔺 Query Escalated to Principal', f"Your query #{query_id} has been escalated to Principal Executive Desk for direct review and resolution.", 'info'))
-                elif staff_val == user['id'] and user['role'] == 'principal':
+                if staff_val == user['id'] and user['role'] == 'principal':
                     log_details.append(f"Principal {user['name']} took direct ownership to resolve directly. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Handled by: {actor_desc}")
                     target_notifications.append((query['user_id'], query_id, '🏛️ Query In Progress with Principal', f"Principal {user['name']} has taken your query #{query_id} to resolve directly.", 'info'))
                     if prev_staff_id and prev_staff_id != user['id']:
@@ -1742,7 +1739,7 @@ def reassign_query(query_id):
                     if prev_staff_id and prev_staff_id != user['id']:
                         target_notifications.append((prev_staff_id, query_id, '🎓 Query Taken by HOD', f"Department Head {user['name']} has taken direct ownership of Query #{query_id}.", 'info'))
                 elif user['role'] in ['principal', 'admin'] and target_role == 'hod':
-                    log_details.append(f"Assigned/Escalated by {user['role'].capitalize()} to HOD {target_name}. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
+                    log_details.append(f"Assigned by {user['role'].capitalize()} to HOD {target_name}. Previous Handler: {prev_handler_name} -> New Handler: {new_handler_name}; Assigned by: {actor_desc}")
                     target_notifications.append((staff_val, query_id, '🏛️ Query Assigned by Principal' if user['role'] == 'principal' else 'Query Assigned by Admin', f"{user['role'].capitalize()} assigned Query #{query_id} to you: '{query['title']}'. You can resolve it directly or assign to department staff.", 'urgent' if query['priority'] in ['Critical', 'High', 'Urgent'] else 'info'))
                     target_notifications.append((query['user_id'], query_id, 'Query Assigned to HOD', f"Your query #{query_id} has been assigned to Head of Department ({target_name}) for resolution.", 'info'))
                 elif user['role'] == 'hod':

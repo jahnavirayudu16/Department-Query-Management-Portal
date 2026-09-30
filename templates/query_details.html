@@ -357,16 +357,6 @@
         </form>
         {% endif %}
 
-        {% if current_user.role == 'hod' %}
-        <!-- HOD Escalate to Principal Action Form -->
-        <form method="POST" action="{{ url_for('reassign_query', query_id=query.id) }}" style="margin-top: 0.5rem;" onsubmit="return confirm('Escalate this query to the Principal Executive Desk for direct handling?');">
-          <input type="hidden" name="action_type" value="escalate_principal">
-          <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%; font-weight: 800; background: #fff1f2; color: #be123c; border: 1.5px solid #fecdd3; padding: 0.55rem;">
-            🔺 Escalate to Principal Executive Desk
-          </button>
-        </form>
-        {% endif %}
-
       </div>
       {% endif %}
 
